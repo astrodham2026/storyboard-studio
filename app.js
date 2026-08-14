@@ -1,7 +1,11 @@
 /**
  * Storyboard Studio — app.js
- * Features: full-page Scene View, 4-per-row 16:9 images, drag & drop + paste upload,
- *           20 MB limit, original-quality clipboard copy/download, trash bin, live search.
+ * Features: Multi-story management gallery with scrollbar, View & Story Edit modes,
+ *           Landing page ADD STORY & STORIES navigation, Back buttons,
+ *           Image with Prompt & Video with Prompt (3,000 char prompt cap, 1 GB media limit),
+ *           Top & Bottom dual copy buttons for context & prompt boxes,
+ *           full-page Scene View, 4-per-row 16:9 images, 3-per-row 16:9 videos,
+ *           drag & drop + paste upload, trash bin, live search.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,164 +14,439 @@ document.addEventListener('DOMContentLoaded', () => {
      STATE
   =================================================================== */
   const state = {
+    stories: [],              // Array of all saved storyboards: [{id, storyName, genre, scenes: [], trash: [], updatedAt}]
+    activeStoryId: null,      // Current active story ID
     storyName: 'Untitled Storyboard',
     genre: '',
     scenes: [],
     trash: [],
     activeSceneId: null,
-    viewSceneId: null,   // which scene we are currently viewing
+    viewSceneId: null,        // which scene we are currently viewing
+    viewModeSource: 'editor', // 'editor' or 'stories'
     presentIndex: 0,
-    searchQuery: ''
+    searchQuery: '',
+    storiesSearchQuery: '',
+    promptMode: false,        // whether current media modal was opened in Prompt mode
+    tasks: [],                // Array of tasks: [{id, text, completed}]
+    notes: ''                 // Free-text notes
   };
 
-  // Raw Blob store — keyed by image element id — never serialised to localStorage
-  // This ensures clipboard/download always uses original byte-perfect file.
+  // Raw Blob store — keyed by element id — never serialised to localStorage
   const rawBlobStore = {};
 
   /* ===================================================================
      DOM REFERENCES
   =================================================================== */
-  const landingScreen      = document.getElementById('landing-screen');
-  const appScreen          = document.getElementById('app-screen');
-  const workspaceEditMode  = document.getElementById('workspace-edit-mode');
-  const sceneViewScreen    = document.getElementById('scene-view-screen');
-  const btnBackFromView    = document.getElementById('btn-back-from-view');
-  const btnEditFromView    = document.getElementById('btn-edit-from-view');
-  const sceneViewBreadcrumb= document.getElementById('scene-view-breadcrumb');
-  const sceneViewBody      = document.getElementById('scene-view-body');
+  const landingScreen          = document.getElementById('landing-screen');
+  const storiesScreen          = document.getElementById('stories-screen');
+  const appScreen              = document.getElementById('app-screen');
+  const workspaceEditMode      = document.getElementById('workspace-edit-mode');
+  const sceneViewScreen        = document.getElementById('scene-view-screen');
+  const btnBackFromView        = document.getElementById('btn-back-from-view');
+  const btnEditFromView        = document.getElementById('btn-edit-from-view');
+  const sceneViewBreadcrumb    = document.getElementById('scene-view-breadcrumb');
+  const sceneViewBody          = document.getElementById('scene-view-body');
 
-  const btnHeroStart       = document.getElementById('btn-hero-start');
-  const displayStoryName   = document.getElementById('display-story-name');
-  const inputGlobalSearch  = document.getElementById('input-global-search');
-  const btnClearSearch     = document.getElementById('btn-clear-search');
-  const btnOpenTrash       = document.getElementById('btn-open-trash');
-  const trashCount         = document.getElementById('trash-count');
+  const btnHeroAddStory        = document.getElementById('btn-hero-add-story');
+  const btnHeroStories         = document.getElementById('btn-hero-stories');
+  const landingStoriesCount    = document.getElementById('landing-stories-count');
+  const btnBackToHomeFromStories= document.getElementById('btn-back-to-home-from-stories');
+  const btnStoriesAddNew       = document.getElementById('btn-stories-add-new');
+  const inputStoriesSearch     = document.getElementById('input-stories-search');
+  const storiesGridContainer   = document.getElementById('stories-grid-container');
+  const storiesTotalBadge      = document.getElementById('stories-total-badge');
+  const btnNavStoriesList      = document.getElementById('btn-nav-stories-list');
 
-  const sidebarSceneList   = document.getElementById('sidebar-scene-list');
-  const sceneCountBadge    = document.getElementById('scene-count-badge');
-  const btnSidebarAddScene = document.getElementById('btn-sidebar-add-scene');
+  const displayStoryName       = document.getElementById('display-story-name');
+  const inputGlobalSearch      = document.getElementById('input-global-search');
+  const btnClearSearch         = document.getElementById('btn-clear-search');
+  const btnOpenTrash           = document.getElementById('btn-open-trash');
+  const trashCount             = document.getElementById('trash-count');
 
-  const inputSceneTitle    = document.getElementById('input-scene-title');
-  const inputSceneDesc     = document.getElementById('input-scene-desc');
-  const storyboardFrame    = document.getElementById('storyboard-frame');
-  const emptyCanvasView    = document.getElementById('empty-canvas-view');
-  const sceneElementsGrid  = document.getElementById('scene-elements-grid');
-  const btnCanvasAddContent= document.getElementById('btn-canvas-add-content');
+  const sidebarSceneList       = document.getElementById('sidebar-scene-list');
+  const sceneCountBadge        = document.getElementById('scene-count-badge');
+  const btnSidebarAddScene     = document.getElementById('btn-sidebar-add-scene');
+
+  const inputSceneTitle        = document.getElementById('input-scene-title');
+  const inputSceneDesc         = document.getElementById('input-scene-desc');
+  const storyboardFrame        = document.getElementById('storyboard-frame');
+  const emptyCanvasView        = document.getElementById('empty-canvas-view');
+  const sceneElementsGrid      = document.getElementById('scene-elements-grid');
+  const btnCanvasAddContent    = document.getElementById('btn-canvas-add-content');
 
   // Modals
-  const modalStorySetup    = document.getElementById('modal-story-setup');
-  const formStorySetup     = document.getElementById('form-story-setup');
-  const inputStoryName     = document.getElementById('input-story-name');
-  const inputStoryGenre    = document.getElementById('input-story-genre');
+  const modalStorySetup        = document.getElementById('modal-story-setup');
+  const formStorySetup         = document.getElementById('form-story-setup');
+  const inputStoryName         = document.getElementById('input-story-name');
+  const inputStoryGenre        = document.getElementById('input-story-genre');
 
-  const modalAddScene      = document.getElementById('modal-add-scene');
-  const formAddScene       = document.getElementById('form-add-scene');
-  const inputNewSceneName  = document.getElementById('input-new-scene-name');
+  const modalAddScene          = document.getElementById('modal-add-scene');
+  const formAddScene           = document.getElementById('form-add-scene');
+  const inputNewSceneName      = document.getElementById('input-new-scene-name');
 
-  const modalContentType   = document.getElementById('modal-content-type');
-  const optSelectImage     = document.getElementById('opt-select-image');
-  const optSelectContext   = document.getElementById('opt-select-context');
+  const modalContentType       = document.getElementById('modal-content-type');
+  const optSelectImage         = document.getElementById('opt-select-image');
+  const optSelectVideo         = document.getElementById('opt-select-video');
+  const optSelectContext       = document.getElementById('opt-select-context');
+  const optSelectImagePrompt   = document.getElementById('opt-select-image-prompt');
+  const optSelectVideoPrompt   = document.getElementById('opt-select-video-prompt');
 
-  const modalAddImage      = document.getElementById('modal-add-image');
-  const formAddImage       = document.getElementById('form-add-image');
-  const inputImageAlt      = document.getElementById('input-image-alt');
-  const inputFileImage     = document.getElementById('input-file-image');
-  const inputUrlImage      = document.getElementById('input-url-image');
-  const btnBrowseFile      = document.getElementById('btn-browse-file');
-  const btnOpenSketch      = document.getElementById('btn-open-sketch');
-  const imageDropZone      = document.getElementById('image-drop-zone');
-  const dropZonePreview    = document.getElementById('drop-zone-preview');
+  const modalAddImage          = document.getElementById('modal-add-image');
+  const modalImageTitle        = document.getElementById('modal-image-title');
+  const formAddImage           = document.getElementById('form-add-image');
+  const inputImageAlt          = document.getElementById('input-image-alt');
+  const inputFileImage         = document.getElementById('input-file-image');
+  const inputUrlImage          = document.getElementById('input-url-image');
+  const btnBrowseFile          = document.getElementById('btn-browse-file');
+  const btnOpenSketch          = document.getElementById('btn-open-sketch');
+  const imageDropZone          = document.getElementById('image-drop-zone');
+  const dropZonePreview        = document.getElementById('drop-zone-preview');
+  const groupImagePrompt       = document.getElementById('group-image-prompt');
+  const inputImagePrompt       = document.getElementById('input-image-prompt');
+  const promptImgCharCount     = document.getElementById('prompt-img-char-count');
 
-  const modalAddContext    = document.getElementById('modal-add-context');
-  const formAddContext     = document.getElementById('form-add-context');
-  const selectContextCategory = document.getElementById('select-context-category');
-  const textareaContextText   = document.getElementById('textarea-context-text');
+  const modalAddVideo          = document.getElementById('modal-add-video');
+  const modalVideoTitle        = document.getElementById('modal-video-title');
+  const formAddVideo           = document.getElementById('form-add-video');
+  const inputVideoAlt          = document.getElementById('input-video-alt');
+  const inputFileVideo         = document.getElementById('input-file-video');
+  const inputUrlVideo          = document.getElementById('input-url-video');
+  const btnBrowseVideoFile     = document.getElementById('btn-browse-video-file');
+  const videoDropZone          = document.getElementById('video-drop-zone');
+  const videoDropZonePreview    = document.getElementById('video-drop-zone-preview');
+  const groupVideoPrompt       = document.getElementById('group-video-prompt');
+  const inputVideoPrompt       = document.getElementById('input-video-prompt');
+  const promptVideoCharCount   = document.getElementById('prompt-video-char-count');
 
-  const modalSketchPad     = document.getElementById('modal-sketch-pad');
-  const sketchCanvas       = document.getElementById('sketch-canvas');
-  const sketchColor        = document.getElementById('sketch-color');
-  const sketchSize         = document.getElementById('sketch-size');
-  const btnClearSketch     = document.getElementById('btn-clear-sketch');
-  const btnSaveSketch      = document.getElementById('btn-save-sketch');
-  let   isDrawing          = false;
-  const ctx                = sketchCanvas ? sketchCanvas.getContext('2d') : null;
+  const modalAddContext        = document.getElementById('modal-add-context');
+  const formAddContext         = document.getElementById('form-add-context');
+  const selectContextCategory  = document.getElementById('select-context-category');
 
-  const modalTrashBin      = document.getElementById('modal-trash-bin');
-  const trashItemsContainer= document.getElementById('trash-items-container');
-  const btnEmptyTrash      = document.getElementById('btn-empty-trash');
+  const modalSketchPad         = document.getElementById('modal-sketch-pad');
+  const sketchCanvas           = document.getElementById('sketch-canvas');
+  const sketchColor            = document.getElementById('sketch-color');
+  const sketchSize             = document.getElementById('sketch-size');
+  const btnClearSketch         = document.getElementById('btn-clear-sketch');
+  const btnSaveSketch          = document.getElementById('btn-save-sketch');
+  let   isDrawing              = false;
+  const ctx                    = sketchCanvas ? sketchCanvas.getContext('2d') : null;
 
-  const modalPresentation  = document.getElementById('modal-presentation');
-  const btnNavPresent      = document.getElementById('btn-nav-present');
-  const presentStoryTitle  = document.getElementById('present-story-title');
-  const presentCurrentIdx  = document.getElementById('present-current-index');
-  const presentTotalScenes = document.getElementById('present-total-scenes');
-  const presentSlideContent= document.getElementById('present-slide-content');
-  const btnPresentPrev     = document.getElementById('btn-present-prev');
-  const btnPresentNext     = document.getElementById('btn-present-next');
+  const modalTrashBin          = document.getElementById('modal-trash-bin');
+  const trashItemsContainer    = document.getElementById('trash-items-container');
+  const btnEmptyTrash          = document.getElementById('btn-empty-trash');
 
-  const btnNavExportJson   = document.getElementById('btn-nav-export-json');
-  const btnNavNew          = document.getElementById('btn-nav-new');
+  const modalExpandText        = document.getElementById('modal-expand-text');
+  const modalExpandTitle       = document.getElementById('modal-expand-title');
+  const modalExpandContent     = document.getElementById('modal-expand-content');
+  const modalExpandMeta        = document.getElementById('modal-expand-meta');
+  const btnModalExpandCopy     = document.getElementById('btn-modal-expand-copy');
+  let   activeExpandText       = '';
 
-  // Pending images queued in drop zone before form submit
-  let pendingDropImages    = []; // [{dataUrl, blob, fileName}]
+  const modalPresentation      = document.getElementById('modal-presentation');
+  const btnNavPresent          = document.getElementById('btn-nav-present');
+  const presentStoryTitle      = document.getElementById('present-story-title');
+  const presentCurrentIdx      = document.getElementById('present-current-index');
+  const presentTotalScenes     = document.getElementById('present-total-scenes');
+  const presentSlideContent    = document.getElementById('present-slide-content');
+  const btnPresentPrev         = document.getElementById('btn-present-prev');
+  const btnPresentNext         = document.getElementById('btn-present-next');
+
+  const btnNavExportJson       = document.getElementById('btn-nav-export-json');
+  const btnNavNew              = document.getElementById('btn-nav-new');
+
+  // Pending images/videos queued in drop zone before form submit
+  let pendingDropImages        = [];
+  let pendingDropVideos        = [];
 
   /* ===================================================================
-     INIT
+     INIT & STORAGE MANAGEMENT
   =================================================================== */
   function init() {
     setupModalClose();
     setupSketchPad();
     setupDropZone();
+    setupVideoDropZone();
     setupEventListeners();
+    setupPromptCharacterCounters();
+    setupTasksNotes();
 
-    const saved = localStorage.getItem('storyboard_studio_data');
-    if (saved) {
+    loadAllStories();
+  }
+
+  function loadAllStories() {
+    const rawAll = localStorage.getItem('storyboard_studio_all_stories');
+    let loaded = [];
+    if (rawAll) {
+      try { loaded = JSON.parse(rawAll) || []; } catch(e) { console.error(e); }
+    }
+
+    // Migration check: legacy single storyboard key
+    const legacy = localStorage.getItem('storyboard_studio_data');
+    if (legacy && loaded.length === 0) {
       try {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(legacy);
         if (parsed && parsed.scenes && parsed.scenes.length > 0) {
-          Object.assign(state, { storyName: parsed.storyName || 'Saved Storyboard', genre: parsed.genre || '', scenes: parsed.scenes, trash: parsed.trash || [] });
-          state.activeSceneId = parsed.scenes[0].id;
-          openWorkspace();
-          updateTrashBadge();
-          showToast('Restored saved storyboard!');
+          const legacyStory = {
+            id: `story_${Date.now()}`,
+            storyName: parsed.storyName || 'Saved Storyboard',
+            genre: parsed.genre || '',
+            scenes: parsed.scenes,
+            trash: parsed.trash || [],
+            updatedAt: new Date().toISOString()
+          };
+          loaded.push(legacyStory);
         }
       } catch(e) { console.error(e); }
     }
+
+    state.stories = loaded;
+    updateLandingBadges();
+  }
+
+  function updateLandingBadges() {
+    if (landingStoriesCount) landingStoriesCount.textContent = state.stories.length;
+    if (storiesTotalBadge) storiesTotalBadge.textContent = state.stories.length;
   }
 
   function save() {
+    if (!state.activeStoryId) {
+      state.activeStoryId = `story_${Date.now()}`;
+    }
+
+    let current = state.stories.find(s => s.id === state.activeStoryId);
+    if (!current) {
+      current = {
+        id: state.activeStoryId,
+        storyName: state.storyName,
+        genre: state.genre,
+        scenes: state.scenes,
+        trash: state.trash,
+        tasks: state.tasks,
+        notes: state.notes,
+        updatedAt: new Date().toISOString()
+      };
+      state.stories.push(current);
+    } else {
+      current.storyName = state.storyName;
+      current.genre = state.genre;
+      current.scenes = state.scenes;
+      current.trash = state.trash;
+      current.tasks = state.tasks;
+      current.notes = state.notes;
+      current.updatedAt = new Date().toISOString();
+    }
+
+    localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
     localStorage.setItem('storyboard_studio_data', JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes, trash: state.trash }));
     updateTrashBadge();
+    updateLandingBadges();
+  }
+
+  function loadStoryToState(storyId) {
+    const s = state.stories.find(item => item.id === storyId);
+    if (!s) return false;
+    state.activeStoryId = s.id;
+    state.storyName = s.storyName || 'Untitled Storyboard';
+    state.genre = s.genre || '';
+    state.scenes = s.scenes || [];
+    state.trash = s.trash || [];
+    state.tasks = s.tasks || [];
+    state.notes = s.notes || '';
+    state.activeSceneId = s.scenes && s.scenes.length > 0 ? s.scenes[0].id : null;
+    return true;
   }
 
   function updateTrashBadge() { if (trashCount) trashCount.textContent = state.trash.length; }
 
   /* ===================================================================
-     LANDING → WORKSPACE FLOW
+     SCREEN NAVIGATION CONTROLLERS
   =================================================================== */
-  btnHeroStart.addEventListener('click', () => { openModal(modalStorySetup); inputStoryName.focus(); });
+  function hideAllScreens() {
+    landingScreen.classList.remove('active');
+    storiesScreen.classList.remove('active');
+    appScreen.classList.remove('active');
+  }
 
-  formStorySetup.addEventListener('submit', e => {
-    e.preventDefault();
-    const name = inputStoryName.value.trim(); if (!name) return;
-    state.storyName = name; state.genre = inputStoryGenre.value.trim();
-    if (!state.scenes.length) { const s = makeScene('Scene 1 — Establishing Shot'); state.scenes.push(s); state.activeSceneId = s.id; }
-    closeModal(modalStorySetup);
-    openWorkspace(); save(); showToast(`Storyboard "${state.storyName}" created!`);
-  });
+  function openStoriesGallery() {
+    hideAllScreens();
+    storiesScreen.classList.add('active');
+    renderStoriesList();
+  }
 
   function openWorkspace() {
-    landingScreen.classList.remove('active');
+    hideAllScreens();
     appScreen.classList.add('active');
+    showEditMode();
     displayStoryName.textContent = state.storyName;
-    renderSidebar(); renderActiveScene();
+    renderSidebar();
+    renderActiveScene();
+  }
+
+  /* ===================================================================
+     LANDING & STORIES GALLERY EVENT LISTENERS
+  =================================================================== */
+  // Legacy alias + new ADD STORY button
+  const btnHeroStart = document.getElementById('btn-hero-start');
+  if (btnHeroStart) {
+    btnHeroStart.addEventListener('click', () => {
+      inputStoryName.value = '';
+      inputStoryGenre.value = '';
+      openModal(modalStorySetup);
+      inputStoryName.focus();
+    });
+  }
+
+  if (btnHeroAddStory) {
+    btnHeroAddStory.addEventListener('click', () => {
+      inputStoryName.value = '';
+      inputStoryGenre.value = '';
+      openModal(modalStorySetup);
+      inputStoryName.focus();
+    });
+  }
+
+  if (btnHeroStories) {
+    btnHeroStories.addEventListener('click', () => openStoriesGallery());
+  }
+
+  if (btnBackToHomeFromStories) {
+    btnBackToHomeFromStories.addEventListener('click', () => {
+      hideAllScreens();
+      landingScreen.classList.add('active');
+    });
+  }
+
+  if (btnStoriesAddNew) {
+    btnStoriesAddNew.addEventListener('click', () => {
+      inputStoryName.value = '';
+      inputStoryGenre.value = '';
+      openModal(modalStorySetup);
+      inputStoryName.focus();
+    });
+  }
+
+  if (btnNavStoriesList) {
+    btnNavStoriesList.addEventListener('click', () => openStoriesGallery());
+  }
+
+  if (inputStoriesSearch) {
+    inputStoriesSearch.addEventListener('input', () => {
+      state.storiesSearchQuery = inputStoriesSearch.value.trim();
+      renderStoriesList();
+    });
+  }
+
+  if (formStorySetup) {
+    formStorySetup.addEventListener('submit', e => {
+      e.preventDefault();
+      const name = inputStoryName.value.trim(); if (!name) return;
+
+      state.activeStoryId = `story_${Date.now()}`;
+      state.storyName = name;
+      state.genre = inputStoryGenre.value.trim();
+      state.scenes = [];
+      state.trash = [];
+      state.tasks = [];
+      state.notes = '';
+
+      const initialScene = makeScene('Scene 1 — Establishing Shot');
+      state.scenes.push(initialScene);
+      state.activeSceneId = initialScene.id;
+
+      closeModal(modalStorySetup);
+      save();
+      openWorkspace();
+      showToast(`Storyboard "${state.storyName}" created!`);
+    });
+  }
+
+  /* ===================================================================
+     STORIES GALLERY LIST RENDERER
+  =================================================================== */
+  function renderStoriesList() {
+    storiesGridContainer.innerHTML = '';
+    const query = (state.storiesSearchQuery || '').toLowerCase();
+    const filtered = state.stories.filter(s =>
+      (s.storyName || '').toLowerCase().includes(query) ||
+      (s.genre || '').toLowerCase().includes(query)
+    );
+
+    updateLandingBadges();
+
+    if (filtered.length === 0) {
+      storiesGridContainer.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 4rem 1rem; color: var(--text-dim);">
+          <i class="fa-solid fa-folder-open" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; color: var(--accent-cyan);"></i>
+          <h3 style="color: var(--text-muted); font-family: var(--font-heading); margin-bottom: 0.5rem;">No Stories Found</h3>
+          <p style="font-size: 0.9rem;">${state.stories.length === 0 ? 'You have not created any storyboards yet.' : 'No saved stories match your search criteria.'}</p>
+          <button class="btn btn-primary" id="btn-empty-create-story" style="margin-top: 1.25rem;">
+            <i class="fa-solid fa-plus-circle"></i> Create Story
+          </button>
+        </div>`;
+      const emptyBtn = document.getElementById('btn-empty-create-story');
+      if (emptyBtn) emptyBtn.addEventListener('click', () => openModal(modalStorySetup));
+      return;
+    }
+
+    filtered.forEach(story => {
+      const card = document.createElement('div');
+      card.className = 'story-card';
+      const dateStr = story.updatedAt
+        ? new Date(story.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : 'Recently';
+      const sceneCount = story.scenes ? story.scenes.length : 0;
+
+      card.innerHTML = `
+        <div>
+          <div class="story-card-header">
+            <div class="story-card-title">${escHtml(story.storyName || 'Untitled Story')}</div>
+          </div>
+          ${story.genre ? `<span class="story-card-genre">${escHtml(story.genre)}</span>` : ''}
+          <div class="story-card-stats" style="margin-top: 12px;">
+            <span><i class="fa-solid fa-clapperboard" style="color: var(--accent-cyan);"></i> ${sceneCount} Scene${sceneCount !== 1 ? 's' : ''}</span>
+            <span><i class="fa-solid fa-clock" style="color: var(--text-dim);"></i> ${dateStr}</span>
+          </div>
+        </div>
+        <div class="story-card-actions">
+          <button class="btn btn-secondary btn-sm btn-story-view" style="flex: 1;"><i class="fa-solid fa-eye" style="color: var(--accent-cyan);"></i> VIEW</button>
+          <button class="btn btn-primary btn-sm btn-story-edit" style="flex: 1;"><i class="fa-solid fa-pen-to-square"></i> STORY EDIT</button>
+          <button class="btn btn-danger btn-icon btn-sm btn-story-delete" title="Delete Story"><i class="fa-solid fa-trash-can" style="font-size: .75rem;"></i></button>
+        </div>`;
+
+      // VIEW button: opens in full Scene View mode
+      card.querySelector('.btn-story-view').addEventListener('click', () => {
+        loadStoryToState(story.id);
+        if (state.scenes.length > 0) {
+          openSceneView(state.scenes[0].id, 'stories');
+        } else {
+          showToast('This story has no scenes yet!', 'warning');
+        }
+      });
+
+      // STORY EDIT button: opens directly in workspace editor
+      card.querySelector('.btn-story-edit').addEventListener('click', () => {
+        loadStoryToState(story.id);
+        openWorkspace();
+      });
+
+      // DELETE button
+      card.querySelector('.btn-story-delete').addEventListener('click', () => {
+        if (!confirm(`Delete story "${story.storyName}" permanently?`)) return;
+        state.stories = state.stories.filter(s => s.id !== story.id);
+        if (state.activeStoryId === story.id) state.activeStoryId = null;
+        localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
+        renderStoriesList();
+        showToast('Story deleted');
+      });
+
+      storiesGridContainer.appendChild(card);
+    });
   }
 
   btnNavNew.addEventListener('click', () => {
-    if (!confirm('Start a new story? Export first to avoid losing work.')) return;
-    Object.assign(state, { storyName: 'Untitled Storyboard', genre: '', scenes: [], trash: [], activeSceneId: null });
-    localStorage.removeItem('storyboard_studio_data');
-    appScreen.classList.remove('active'); landingScreen.classList.add('active');
+    if (!confirm('Start a new story? Your existing work is saved in Stories.')) return;
+    inputStoryName.value = '';
+    inputStoryGenre.value = '';
     openModal(modalStorySetup);
   });
 
@@ -209,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <button class="btn btn-danger btn-icon btn-sm btn-delete-scene" title="Move to Trash"><i class="fa-solid fa-trash-can" style="font-size:.75rem;"></i></button>
         </div>`;
 
-      item.querySelector('.btn-view-scene').addEventListener('click', e => { e.stopPropagation(); openSceneView(scene.id); });
+      item.querySelector('.btn-view-scene').addEventListener('click', e => { e.stopPropagation(); openSceneView(scene.id, 'editor'); });
       item.querySelector('.btn-edit-scene').addEventListener('click', e => {
         e.stopPropagation(); state.activeSceneId = scene.id;
         showEditMode(); renderSidebar(); renderActiveScene();
@@ -229,20 +508,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ===================================================================
-     FULL-PAGE SCENE VIEW
+     FULL-PAGE SCENE VIEW (WITH DUAL COPY BUTTONS & PROMPT SUPPORT)
   =================================================================== */
-  function openSceneView(sceneId) {
+  function openSceneView(sceneId, source = 'editor') {
     state.viewSceneId = sceneId;
+    state.viewModeSource = source;
     const scene = state.scenes.find(s => s.id === sceneId);
     if (!scene) return;
 
-    // Switch to view screen
     workspaceEditMode.style.display = 'none';
+    appScreen.classList.add('active');
     sceneViewScreen.style.display = 'flex';
-    sceneViewBreadcrumb.textContent = scene.title;
+    sceneViewBreadcrumb.textContent = `${state.storyName} — ${scene.title}`;
 
-    // Separate images and context elements
     const images = scene.elements.filter(el => el.type === 'image');
+    const videos = scene.elements.filter(el => el.type === 'video');
     const contexts = scene.elements.filter(el => el.type === 'context');
 
     let html = `
@@ -251,7 +531,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ${scene.description ? `<p style="color:var(--text-muted);font-size:1rem;">${highlightText(scene.description)}</p>` : ''}
       </div>`;
 
-    // 4-per-row image grid
     if (images.length > 0) {
       html += `<div class="scene-view-images-grid">`;
       images.forEach(img => {
@@ -260,46 +539,155 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="image-16-9-wrapper">
               <img src="${img.displaySrc || img.src}" alt="${escHtml(img.alt || '')}">
             </div>
-            ${img.alt ? `<div class="image-alt-caption"><i class="fa-solid fa-info-circle"></i> ${highlightText(img.alt)}</div>` : ''}
+            <div class="image-alt-caption"><i class="fa-solid fa-info-circle"></i> ${img.alt ? highlightText(img.alt) : (img.fileName ? escHtml(img.fileName) : 'Image Frame')}</div>
             <div style="display:flex;gap:6px;padding:6px 8px;background:rgba(0,0,0,0.3);">
-              <button class="btn btn-secondary btn-sm" onclick="copyImgToClipboard('${img.id}','${img.src}')" title="Copy to Clipboard">
+              <button class="btn btn-secondary btn-sm btn-view-copy-img" data-elemid="${img.id}" data-src="${img.src}" title="Copy Image to Clipboard">
                 <i class="fa-solid fa-copy"></i> Copy
               </button>
-              <a href="${img.src}" download="${escHtml(img.fileName || 'image.png')}" class="btn btn-secondary btn-sm" title="Download original quality">
+              <button class="btn-download-media btn-view-download" data-elemid="${img.id}" data-src="${img.src}" data-filename="${escHtml(img.fileName || 'image.png')}" title="Download original">
                 <i class="fa-solid fa-download"></i> Download
-              </a>
+              </button>
             </div>
+            ${img.prompt ? renderPromptBoxHTML(img.id, img.prompt) : ''}
           </div>`;
       });
       html += `</div>`;
     }
 
-    // Context boxes stacked
+    if (videos.length > 0) {
+      html += `<div class="scene-view-videos-grid">`;
+      videos.forEach(vid => {
+        html += `
+          <div class="scene-view-video-card">
+            <div class="video-21-9-wrapper">
+              <video src="${vid.displaySrc || vid.src}" controls preload="metadata"></video>
+            </div>
+            <div class="video-alt-caption"><i class="fa-solid fa-info-circle"></i> ${vid.alt ? highlightText(vid.alt) : (vid.fileName ? escHtml(vid.fileName) : 'Video Clip')}</div>
+            <div style="display:flex;gap:6px;padding:6px 8px;background:rgba(0,0,0,0.3);">
+              <button class="btn-download-media btn-view-download" data-elemid="${vid.id}" data-src="${vid.src}" data-filename="${escHtml(vid.fileName || 'video.mp4')}" title="Download original">
+                <i class="fa-solid fa-download"></i> Download
+              </button>
+            </div>
+            ${vid.prompt ? renderPromptBoxHTML(vid.id, vid.prompt) : ''}
+          </div>`;
+      });
+      html += `</div>`;
+    }
+
     if (contexts.length > 0) {
       html += `<div class="scene-view-contexts">`;
-      contexts.forEach(ctx => {
-        const cls = ctx.category === 'Technical Aspects' ? 'cat-technical' : ctx.category === 'Conversation' ? 'cat-conversation' : 'cat-narration';
+      contexts.forEach(ctxElem => {
+        const cls = ctxElem.category === 'Technical Aspects' ? 'cat-technical' : ctxElem.category === 'Conversation' ? 'cat-conversation' : ctxElem.category === 'Master Prompt' ? 'cat-master' : 'cat-narration';
+        const safeCtxText = escHtml(ctxElem.text || '');
         html += `
           <div class="scene-view-context-card">
-            <div class="context-box-render">
-              <span class="category-badge ${cls}">${escHtml(ctx.category)}</span>
-              <div class="context-text-display">${highlightText(ctx.text)}</div>
+            <div class="context-box-render" style="position: relative;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="category-badge ${cls}">${escHtml(ctxElem.category)}</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <button class="copy-icon-btn btn-copy-text" data-text="${safeCtxText}" title="Copy Text">
+                    <i class="fa-solid fa-copy"></i> Copy
+                  </button>
+                  <button class="expand-icon-btn btn-expand-text" data-text="${safeCtxText}" data-title="${escHtml(ctxElem.category)}" title="Expand Full View">
+                    <i class="fa-solid fa-expand"></i> Expand
+                  </button>
+                </div>
+              </div>
+              <div class="context-text-display">${highlightText(ctxElem.text)}</div>
+              <div class="bottom-copy-bar" style="margin-top: 8px;">
+                <button class="expand-icon-btn btn-expand-text" data-text="${safeCtxText}" data-title="${escHtml(ctxElem.category)}" title="Expand Full View">
+                  <i class="fa-solid fa-expand"></i> Expand
+                </button>
+                <button class="copy-icon-btn btn-copy-text" data-text="${safeCtxText}" title="Copy Text">
+                  <i class="fa-solid fa-copy"></i> Copy
+                </button>
+              </div>
             </div>
           </div>`;
       });
       html += `</div>`;
     }
 
-    if (!images.length && !contexts.length) {
+    if (!images.length && !videos.length && !contexts.length) {
       html += `<p style="color:var(--text-dim);text-align:center;padding:3rem;">No content in this scene yet.</p>`;
     }
 
     sceneViewBody.innerHTML = html;
+
+    sceneViewBody.querySelectorAll('.btn-view-download').forEach(btn => {
+      btn.addEventListener('click', () => downloadOriginal(btn.dataset.elemid, btn.dataset.src, btn.dataset.filename));
+    });
+    sceneViewBody.querySelectorAll('.btn-view-copy-img').forEach(btn => {
+      btn.addEventListener('click', () => window.copyImgToClipboard(btn.dataset.elemid, btn.dataset.src));
+    });
+    sceneViewBody.querySelectorAll('.btn-copy-text').forEach(btn => {
+      btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text));
+    });
   }
 
-  // Global clipboard copy function (for view mode buttons)
+  function renderPromptBoxHTML(elemId, promptText) {
+    const safeText = escHtml(promptText || '');
+    return `
+      <div class="prompt-box-wrapper" style="margin-top: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); overflow: hidden;">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(6,182,212,0.1); border-bottom: 1px solid var(--border-color);">
+          <span style="font-size: 0.78rem; font-weight: 700; color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-terminal"></i> Prompt
+          </span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <button class="copy-icon-btn btn-copy-text" data-text="${safeText}" title="Copy Prompt">
+              <i class="fa-solid fa-copy"></i> Copy
+            </button>
+            <button class="expand-icon-btn btn-expand-text" data-text="${safeText}" data-title="Prompt Text" title="Expand Full View">
+              <i class="fa-solid fa-expand"></i> Expand
+            </button>
+          </div>
+        </div>
+        <div style="padding: 8px 10px; font-family: 'Courier New', monospace; font-size: 0.85rem; color: #e2e8f0; white-space: pre-wrap; word-break: break-word;">
+          ${highlightText(promptText)}
+        </div>
+        <div class="bottom-copy-bar">
+          <button class="expand-icon-btn btn-expand-text" data-text="${safeText}" data-title="Prompt Text" title="Expand Full View">
+            <i class="fa-solid fa-expand"></i> Expand
+          </button>
+          <button class="copy-icon-btn btn-copy-text" data-text="${safeText}" title="Copy Prompt">
+            <i class="fa-solid fa-copy"></i> Copy
+          </button>
+        </div>
+      </div>`;
+  }
+
+  function openExpandTextModal(title, text) {
+    activeExpandText = text || '';
+    if (modalExpandTitle) {
+      modalExpandTitle.innerHTML = `<i class="fa-solid fa-up-right-and-down-left-from-center" style="color: var(--accent-cyan);"></i> ${escHtml(title || 'Full View')}`;
+    }
+    if (modalExpandContent) {
+      modalExpandContent.textContent = activeExpandText;
+    }
+    if (modalExpandMeta) {
+      const charCount = activeExpandText.length;
+      const wordCount = countWords(activeExpandText);
+      modalExpandMeta.textContent = `${wordCount} words | ${charCount} characters`;
+    }
+    openModal(modalExpandText);
+  }
+
+  function copyTextToClipboard(text) {
+    if (!text) { showToast('No text to copy!', 'warning'); return; }
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Text copied to clipboard!');
+    }).catch(() => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast('Text copied to clipboard!');
+    });
+  }
+
   window.copyImgToClipboard = function(imgId, fallbackSrc) {
-    // Try raw blob first
     const blob = rawBlobStore[imgId];
     if (blob) {
       navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
@@ -309,6 +697,21 @@ document.addEventListener('DOMContentLoaded', () => {
       copyFromSrc(fallbackSrc);
     }
   };
+
+  function downloadOriginal(elemId, fallbackSrc, fileName) {
+    const blob = rawBlobStore[elemId];
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName || 'download'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(`Downloading: ${fileName}`);
+    } else {
+      const a = document.createElement('a');
+      a.href = fallbackSrc; a.download = fileName || 'download'; a.target = '_blank'; a.click();
+      showToast(`Downloading: ${fileName}`);
+    }
+  }
 
   function copyFromSrc(src) {
     const img = new Image(); img.crossOrigin = 'anonymous'; img.src = src;
@@ -329,14 +732,21 @@ document.addEventListener('DOMContentLoaded', () => {
     workspaceEditMode.style.display = 'flex';
   }
 
-  btnBackFromView.addEventListener('click', () => showEditMode());
+  btnBackFromView.addEventListener('click', () => {
+    if (state.viewModeSource === 'stories') {
+      openStoriesGallery();
+    } else {
+      showEditMode();
+    }
+  });
+
   btnEditFromView.addEventListener('click', () => {
     if (state.viewSceneId) state.activeSceneId = state.viewSceneId;
     showEditMode(); renderSidebar(); renderActiveScene();
   });
 
   /* ===================================================================
-     CANVAS EDIT PAD
+     CANVAS EDIT PAD (WITH DUAL COPY BUTTONS FOR ALL BOXES)
   =================================================================== */
   function getActiveScene() { return state.scenes.find(s => s.id === state.activeSceneId); }
 
@@ -350,23 +760,23 @@ document.addEventListener('DOMContentLoaded', () => {
     emptyCanvasView.style.display = hasElements ? 'none' : 'flex';
     storyboardFrame.classList.toggle('has-content', hasElements);
 
-    // Render images first (4-per-row grid)
     const images = scene.elements.filter(el => el.type === 'image');
+    const videos = scene.elements.filter(el => el.type === 'video');
     const contexts = scene.elements.filter(el => el.type === 'context');
 
-    images.forEach((elem, i) => {
+    images.forEach((elem) => {
       const card = document.createElement('div');
-      card.className = 'content-card';
+      card.className = 'content-card image-card';
       card.innerHTML = `
         <div class="content-card-header">
           <span class="content-type-tag tag-image"><i class="fa-solid fa-image"></i> IMG</span>
           <div class="content-card-actions">
-            <button class="btn btn-secondary btn-sm" title="Copy to Clipboard" data-imgid="${elem.id}" data-src="${elem.src}">
+            <button class="btn btn-secondary btn-sm btn-copy-img" title="Copy Image to Clipboard" data-imgid="${elem.id}" data-src="${elem.src}">
               <i class="fa-solid fa-copy"></i>
             </button>
-            <a href="${elem.src}" download="${escHtml(elem.fileName || 'image.png')}" class="btn btn-secondary btn-sm" title="Download original">
+            <button class="btn-download-media btn-dl" data-elemid="${elem.id}" data-src="${elem.src}" data-filename="${escHtml(elem.fileName || 'image.png')}" title="Download original">
               <i class="fa-solid fa-download"></i>
-            </a>
+            </button>
             <button class="btn btn-danger btn-icon btn-sm btn-remove-elem" title="Trash">
               <i class="fa-solid fa-trash-can" style="font-size:.7rem;"></i>
             </button>
@@ -376,22 +786,60 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="image-16-9-wrapper">
             <img src="${elem.displaySrc || elem.src}" alt="${escHtml(elem.alt || 'Scene Frame')}">
           </div>
-          ${elem.alt ? `<div class="image-alt-caption"><i class="fa-solid fa-info-circle"></i> ${highlightText(elem.alt)}</div>` : ''}
+          <div class="image-alt-caption"><i class="fa-solid fa-info-circle"></i> ${elem.alt ? highlightText(elem.alt) : (elem.fileName ? escHtml(elem.fileName) : 'Image Frame')}</div>
+          ${elem.prompt ? renderPromptBoxHTML(elem.id, elem.prompt) : ''}
         </div>`;
 
-      card.querySelector('[data-imgid]').addEventListener('click', () => {
-        window.copyImgToClipboard(elem.id, elem.src);
-      });
+      card.querySelector('.btn-copy-img').addEventListener('click', () => window.copyImgToClipboard(elem.id, elem.src));
+      card.querySelector('.btn-dl').addEventListener('click', () => downloadOriginal(elem.id, elem.src, elem.fileName || 'image.png'));
       card.querySelector('.btn-remove-elem').addEventListener('click', () => {
         const idx = scene.elements.findIndex(el => el.id === elem.id);
         if (idx !== -1) { const removed = scene.elements.splice(idx, 1)[0]; pushToTrash('element', removed, scene.id); }
         renderActiveScene(); save();
       });
+      card.querySelectorAll('.btn-copy-text').forEach(btn => {
+        btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text));
+      });
 
       sceneElementsGrid.appendChild(card);
     });
 
-    // Then render context boxes (full-width) with inline editable textarea
+    videos.forEach((elem) => {
+      const card = document.createElement('div');
+      card.className = 'content-card video-card';
+      card.innerHTML = `
+        <div class="content-card-header">
+          <span class="content-type-tag tag-video"><i class="fa-solid fa-video"></i> VID</span>
+          <div class="content-card-actions">
+            <button class="btn-download-media btn-dl" data-elemid="${elem.id}" data-src="${elem.src}" data-filename="${escHtml(elem.fileName || 'video.mp4')}" title="Download original">
+              <i class="fa-solid fa-download"></i>
+            </button>
+            <button class="btn btn-danger btn-icon btn-sm btn-remove-elem" title="Trash">
+              <i class="fa-solid fa-trash-can" style="font-size:.7rem;"></i>
+            </button>
+          </div>
+        </div>
+        <div class="content-card-body">
+          <div class="video-21-9-wrapper">
+            <video src="${elem.displaySrc || elem.src}" controls preload="metadata"></video>
+          </div>
+          <div class="video-alt-caption"><i class="fa-solid fa-info-circle"></i> ${elem.alt ? highlightText(elem.alt) : (elem.fileName ? escHtml(elem.fileName) : 'Video Clip')}</div>
+          ${elem.prompt ? renderPromptBoxHTML(elem.id, elem.prompt) : ''}
+        </div>`;
+
+      card.querySelector('.btn-dl').addEventListener('click', () => downloadOriginal(elem.id, elem.src, elem.fileName || 'video.mp4'));
+      card.querySelector('.btn-remove-elem').addEventListener('click', () => {
+        const idx = scene.elements.findIndex(el => el.id === elem.id);
+        if (idx !== -1) { const removed = scene.elements.splice(idx, 1)[0]; pushToTrash('element', removed, scene.id); }
+        renderActiveScene(); save();
+      });
+      card.querySelectorAll('.btn-copy-text').forEach(btn => {
+        btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.text));
+      });
+
+      sceneElementsGrid.appendChild(card);
+    });
+
     contexts.forEach((elem) => {
       const MASTER = elem.category === 'Master Prompt';
       const WORD_LIMIT = 10000;
@@ -404,7 +852,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = 'content-card full-width';
 
-      // Counter display initial
       const currentCount = MASTER ? (elem.text || '').length : countWords(elem.text || '');
       const limit        = MASTER ? CHAR_LIMIT : WORD_LIMIT;
       const unit         = MASTER ? 'chars' : 'words';
@@ -416,8 +863,10 @@ document.addEventListener('DOMContentLoaded', () => {
             <span class="content-type-tag tag-context"><i class="fa-solid fa-message"></i> ${escHtml(elem.category)}</span>
             <span class="category-badge ${cls}" style="font-size:.7rem;">${escHtml(elem.category)}</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:6px;">
             <span class="ctx-counter ${overLimit ? 'ctx-counter-over' : ''}" data-elemid="${elem.id}">${currentCount} / ${limit} ${unit}</span>
+            <button class="copy-icon-btn btn-copy-top-ctx" title="Copy Top"><i class="fa-solid fa-copy"></i> Copy</button>
+            <button class="expand-icon-btn btn-expand-top-ctx" title="Expand Full View"><i class="fa-solid fa-expand"></i> Expand</button>
             <button class="btn btn-danger btn-icon btn-sm btn-remove-elem" title="Trash"><i class="fa-solid fa-trash-can" style="font-size:.7rem;"></i></button>
           </div>
         </div>
@@ -429,17 +878,24 @@ document.addEventListener('DOMContentLoaded', () => {
             placeholder="${MASTER ? 'Enter master prompt (max 3,000 characters)...' : 'Type here — auto-saves as you type...'}"
             spellcheck="true"
           >${escHtml(elem.text || '')}</textarea>
+        </div>
+        <div class="bottom-copy-bar">
+          <button class="expand-icon-btn btn-expand-bottom-ctx" title="Expand Full View"><i class="fa-solid fa-expand"></i> Expand</button>
+          <button class="copy-icon-btn btn-copy-bottom-ctx" title="Copy Bottom"><i class="fa-solid fa-copy"></i> Copy</button>
         </div>`;
 
-      // REMOVE button
+      const ta = card.querySelector('.ctx-inline-textarea');
+      card.querySelector('.btn-copy-top-ctx').addEventListener('click', () => copyTextToClipboard(ta.value));
+      card.querySelector('.btn-copy-bottom-ctx').addEventListener('click', () => copyTextToClipboard(ta.value));
+      card.querySelector('.btn-expand-top-ctx').addEventListener('click', () => openExpandTextModal(elem.category, ta.value));
+      card.querySelector('.btn-expand-bottom-ctx').addEventListener('click', () => openExpandTextModal(elem.category, ta.value));
+
       card.querySelector('.btn-remove-elem').addEventListener('click', () => {
         const idx = scene.elements.findIndex(el => el.id === elem.id);
         if (idx !== -1) { const removed = scene.elements.splice(idx, 1)[0]; pushToTrash('element', removed, scene.id); }
         renderActiveScene(); save();
       });
 
-      // INLINE TEXTAREA — auto-save + limit enforcement
-      const ta = card.querySelector('.ctx-inline-textarea');
       const counter = card.querySelector('.ctx-counter');
       let saveTimer = null;
 
@@ -452,12 +908,10 @@ document.addEventListener('DOMContentLoaded', () => {
         counter.classList.toggle('ctx-counter-over', over);
 
         if (over) {
-          // Trim: prevent typing more
           if (MASTER) {
             ta.value = raw.slice(0, CHAR_LIMIT);
             showToast(`Master Prompt limit: ${CHAR_LIMIT} characters max!`, 'warning');
           } else {
-            // Trim to word limit
             const trimmed = trimToWordLimit(raw, WORD_LIMIT);
             ta.value = trimmed;
             const newCount = countWords(trimmed);
@@ -467,7 +921,6 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Debounced auto-save
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
           const el = state.scenes.flatMap(s => s.elements).find(el => el.id === elem.id);
@@ -475,7 +928,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 600);
       });
 
-      // Paste intercept for big pastes
       ta.addEventListener('paste', (e) => {
         const pasted = e.clipboardData.getData('text');
         const currentText = ta.value;
@@ -486,7 +938,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const available = CHAR_LIMIT - currentText.length;
             if (available > 0) ta.value = currentText + pasted.slice(0, available);
             showToast(`Master Prompt limited to ${CHAR_LIMIT} characters!`, 'warning');
-            // trigger input event to sync
             ta.dispatchEvent(new Event('input'));
           }
         } else {
@@ -509,90 +960,227 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  inputSceneTitle.addEventListener('input', () => {
-    const s = getActiveScene(); if (!s) return;
-    s.title = inputSceneTitle.value; renderSidebar(); save();
-  });
-  inputSceneDesc.addEventListener('input', () => {
-    const s = getActiveScene(); if (!s) return;
-    s.description = inputSceneDesc.value; save();
-  });
+  if (inputSceneTitle) {
+    inputSceneTitle.addEventListener('input', () => {
+      const s = getActiveScene(); if (!s) return;
+      s.title = inputSceneTitle.value; renderSidebar(); save();
+    });
+  }
+  if (inputSceneDesc) {
+    inputSceneDesc.addEventListener('input', () => {
+      const s = getActiveScene(); if (!s) return;
+      s.description = inputSceneDesc.value; save();
+    });
+  }
 
   /* ===================================================================
-     ADD CONTENT
+     ADD CONTENT OPTIONS & PROMPT ENHANCEMENTS
   =================================================================== */
-  btnCanvasAddContent.addEventListener('click', () => openModal(modalContentType));
-  optSelectImage.addEventListener('click', () => { closeModal(modalContentType); pendingDropImages = []; dropZonePreview.innerHTML = ''; dropZonePreview.style.display = 'none'; openModal(modalAddImage); });
-  optSelectContext.addEventListener('click', () => { closeModal(modalContentType); openModal(modalAddContext); });
+  if (btnCanvasAddContent) {
+    btnCanvasAddContent.addEventListener('click', () => openModal(modalContentType));
+  }
+
+  if (optSelectImage) {
+    optSelectImage.addEventListener('click', () => {
+      closeModal(modalContentType);
+      state.promptMode = false;
+      if (groupImagePrompt) groupImagePrompt.style.display = 'none';
+      if (inputImagePrompt) inputImagePrompt.value = '';
+      if (modalImageTitle) modalImageTitle.innerHTML = `<i class="fa-solid fa-file-image" style="color: var(--accent-cyan);"></i> Insert Image (max 1 GB)`;
+      pendingDropImages = []; if (dropZonePreview) { dropZonePreview.innerHTML = ''; dropZonePreview.style.display = 'none'; }
+      openModal(modalAddImage);
+    });
+  }
+
+  if (optSelectVideo) {
+    optSelectVideo.addEventListener('click', () => {
+      closeModal(modalContentType);
+      state.promptMode = false;
+      if (groupVideoPrompt) groupVideoPrompt.style.display = 'none';
+      if (inputVideoPrompt) inputVideoPrompt.value = '';
+      if (modalVideoTitle) modalVideoTitle.innerHTML = `<i class="fa-solid fa-video" style="color: #a78bfa;"></i> Insert Video (max 1 GB)`;
+      pendingDropVideos = []; if (videoDropZonePreview) { videoDropZonePreview.innerHTML = ''; videoDropZonePreview.style.display = 'none'; }
+      openModal(modalAddVideo);
+    });
+  }
+
+  if (optSelectContext) {
+    optSelectContext.addEventListener('click', () => {
+      closeModal(modalContentType);
+      openModal(modalAddContext);
+    });
+  }
+
+  if (optSelectImagePrompt) {
+    optSelectImagePrompt.addEventListener('click', () => {
+      closeModal(modalContentType);
+      state.promptMode = true;
+      if (groupImagePrompt) groupImagePrompt.style.display = 'block';
+      if (inputImagePrompt) inputImagePrompt.value = '';
+      if (promptImgCharCount) promptImgCharCount.textContent = '0 / 100,000 chars';
+      if (modalImageTitle) modalImageTitle.innerHTML = `<i class="fa-solid fa-file-image" style="color: var(--accent-cyan);"></i> Insert Image with Prompt (max 1 GB)`;
+      pendingDropImages = []; if (dropZonePreview) { dropZonePreview.innerHTML = ''; dropZonePreview.style.display = 'none'; }
+      openModal(modalAddImage);
+    });
+  }
+
+  if (optSelectVideoPrompt) {
+    optSelectVideoPrompt.addEventListener('click', () => {
+      closeModal(modalContentType);
+      state.promptMode = true;
+      if (groupVideoPrompt) groupVideoPrompt.style.display = 'block';
+      if (inputVideoPrompt) inputVideoPrompt.value = '';
+      if (promptVideoCharCount) promptVideoCharCount.textContent = '0 / 100,000 chars';
+      if (modalVideoTitle) modalVideoTitle.innerHTML = `<i class="fa-solid fa-film" style="color: #a78bfa;"></i> Insert Video with Prompt (max 1 GB)`;
+      pendingDropVideos = []; if (videoDropZonePreview) { videoDropZonePreview.innerHTML = ''; videoDropZonePreview.style.display = 'none'; }
+      openModal(modalAddVideo);
+    });
+  }
+
+  function setupPromptCharacterCounters() {
+    const PROMPT_MAX = 100000;
+    if (inputImagePrompt) {
+      inputImagePrompt.addEventListener('input', () => {
+        if (inputImagePrompt.value.length > PROMPT_MAX) {
+          inputImagePrompt.value = inputImagePrompt.value.slice(0, PROMPT_MAX);
+          showToast('Prompt character limit: 100,000 max (1 Lakh)!', 'warning');
+        }
+        if (promptImgCharCount) promptImgCharCount.textContent = `${inputImagePrompt.value.length.toLocaleString()} / 100,000 chars`;
+      });
+    }
+    if (inputVideoPrompt) {
+      inputVideoPrompt.addEventListener('input', () => {
+        if (inputVideoPrompt.value.length > PROMPT_MAX) {
+          inputVideoPrompt.value = inputVideoPrompt.value.slice(0, PROMPT_MAX);
+          showToast('Prompt character limit: 100,000 max (1 Lakh)!', 'warning');
+        }
+        if (promptVideoCharCount) promptVideoCharCount.textContent = `${inputVideoPrompt.value.length.toLocaleString()} / 100,000 chars`;
+      });
+    }
+  }
 
   /* ---- IMAGE FORM SUBMIT ---- */
-  formAddImage.addEventListener('submit', async e => {
-    e.preventDefault();
-    const scene = getActiveScene(); if (!scene) return;
-    const alt = inputImageAlt.value.trim();
-    let added = 0;
+  if (formAddImage) {
+    formAddImage.addEventListener('submit', async e => {
+      e.preventDefault();
+      const scene = getActiveScene(); if (!scene) return;
+      const alt = inputImageAlt ? inputImageAlt.value.trim() : '';
+      const prompt = (groupImagePrompt && groupImagePrompt.style.display !== 'none' && inputImagePrompt) ? inputImagePrompt.value.trim() : '';
+      let added = 0;
 
-    // A) Pending drop/paste images
-    for (const pImg of pendingDropImages) {
-      const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
-      rawBlobStore[elemId] = pImg.blob;
-      scene.elements.push({ id: elemId, type: 'image', src: pImg.dataUrl, displaySrc: pImg.dataUrl, fileName: pImg.fileName, alt });
-      added++;
-    }
+      for (const pImg of pendingDropImages) {
+        const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+        rawBlobStore[elemId] = pImg.blob;
+        scene.elements.push({ id: elemId, type: 'image', src: pImg.dataUrl, displaySrc: pImg.dataUrl, fileName: pImg.fileName, alt, prompt });
+        added++;
+      }
 
-    // B) File upload (if no pending drops)
-    if (!pendingDropImages.length && inputFileImage.files[0]) {
-      const file = inputFileImage.files[0];
-      if (!validateSize(file)) return;
-      const result = await readFileAsDataUrl(file);
-      const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
-      rawBlobStore[elemId] = file;
-      scene.elements.push({ id: elemId, type: 'image', src: result, displaySrc: result, fileName: file.name, alt });
-      added++;
-    }
+      if (!pendingDropImages.length && inputFileImage && inputFileImage.files && inputFileImage.files.length) {
+        const files = Array.from(inputFileImage.files).slice(0, 10);
+        for (const file of files) {
+          if (!validateSize(file)) continue;
+          const result = await readFileAsDataUrl(file);
+          const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+          rawBlobStore[elemId] = file;
+          scene.elements.push({ id: elemId, type: 'image', src: result, displaySrc: result, fileName: file.name, alt, prompt });
+          added++;
+        }
+      }
 
-    // C) URL
-    const url = inputUrlImage.value.trim();
-    if (!added && url) {
-      const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
-      scene.elements.push({ id: elemId, type: 'image', src: url, displaySrc: url, fileName: 'web_image.png', alt });
-      added++;
-    }
+      const url = inputUrlImage ? inputUrlImage.value.trim() : '';
+      if (!added && url) {
+        const elemId = `img_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+        scene.elements.push({ id: elemId, type: 'image', src: url, displaySrc: url, fileName: 'web_image.png', alt, prompt });
+        added++;
+      }
 
-    if (!added) { showToast('Please add an image (drop, paste, browse, or URL)!', 'warning'); return; }
+      if (!added) { showToast('Please add an image (drop, paste, browse, or URL)!', 'warning'); return; }
 
-    inputFileImage.value = ''; inputUrlImage.value = ''; inputImageAlt.value = '';
-    pendingDropImages = []; dropZonePreview.innerHTML = ''; dropZonePreview.style.display = 'none';
-    closeModal(modalAddImage); renderActiveScene(); save();
-    showToast(`${added} image${added > 1 ? 's' : ''} added!`);
-  });
+      if (inputFileImage) inputFileImage.value = '';
+      if (inputUrlImage) inputUrlImage.value = '';
+      if (inputImageAlt) inputImageAlt.value = '';
+      if (inputImagePrompt) inputImagePrompt.value = '';
+      pendingDropImages = []; if (dropZonePreview) { dropZonePreview.innerHTML = ''; dropZonePreview.style.display = 'none'; }
+      closeModal(modalAddImage); renderActiveScene(); save();
+      showToast(`${added} image${added > 1 ? 's' : ''} added!`);
+    });
+  }
 
-  /* ---- CONTEXT FORM SUBMIT — just pick category, inline edit in scene ---- */
-  formAddContext.addEventListener('submit', e => {
-    e.preventDefault();
-    const scene = getActiveScene(); if (!scene) return;
-    const category = selectContextCategory.value;
-    const elemId   = `ctx_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
-    scene.elements.push({ id: elemId, type: 'context', category, text: '' });
-    closeModal(modalAddContext); renderActiveScene(); save();
-    // Focus the new textarea so user can start typing immediately
-    setTimeout(() => {
-      const newTa = sceneElementsGrid.querySelector(`textarea[data-elemid='${elemId}']`);
-      if (newTa) newTa.focus();
-    }, 80);
-    showToast(`${category} box added — type directly in the scene!`);
-  });
+  /* ---- VIDEO FORM SUBMIT ---- */
+  if (formAddVideo) {
+    formAddVideo.addEventListener('submit', async e => {
+      e.preventDefault();
+      const scene = getActiveScene(); if (!scene) return;
+      const alt = inputVideoAlt ? inputVideoAlt.value.trim() : '';
+      const prompt = (groupVideoPrompt && groupVideoPrompt.style.display !== 'none' && inputVideoPrompt) ? inputVideoPrompt.value.trim() : '';
+      let added = 0;
 
-  // Update info text in modal when category changes
-  selectContextCategory.addEventListener('change', () => {
-    const isMaster = selectContextCategory.value === 'Master Prompt';
-    const limitText = document.getElementById('context-limit-text');
-    if (limitText) {
-      limitText.innerHTML = isMaster
-        ? `<strong>Master Prompt</strong> — limited to <strong>3,000 characters</strong>. Text is typed directly in the scene.`
-        : `Narration / Technical / Conversation — up to <strong>10,000 words</strong>. Text is typed directly in the scene.`;
-    }
-  });
+      for (const pVid of pendingDropVideos) {
+        const elemId = `vid_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+        rawBlobStore[elemId] = pVid.blob;
+        scene.elements.push({ id: elemId, type: 'video', src: pVid.dataUrl, displaySrc: pVid.dataUrl, fileName: pVid.fileName, alt, prompt });
+        added++;
+      }
+
+      if (!pendingDropVideos.length && inputFileVideo && inputFileVideo.files && inputFileVideo.files.length) {
+        const files = Array.from(inputFileVideo.files).slice(0, 10);
+        for (const file of files) {
+          if (!validateSize(file)) continue;
+          const result = await readFileAsDataUrl(file);
+          const elemId = `vid_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+          rawBlobStore[elemId] = file;
+          scene.elements.push({ id: elemId, type: 'video', src: result, displaySrc: result, fileName: file.name, alt, prompt });
+          added++;
+        }
+      }
+
+      const url = inputUrlVideo ? inputUrlVideo.value.trim() : '';
+      if (!added && url) {
+        const elemId = `vid_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+        scene.elements.push({ id: elemId, type: 'video', src: url, displaySrc: url, fileName: 'web_video.mp4', alt, prompt });
+        added++;
+      }
+
+      if (!added) { showToast('Please add a video (drop, browse, or URL)!', 'warning'); return; }
+
+      if (inputFileVideo) inputFileVideo.value = '';
+      if (inputUrlVideo) inputUrlVideo.value = '';
+      if (inputVideoAlt) inputVideoAlt.value = '';
+      if (inputVideoPrompt) inputVideoPrompt.value = '';
+      pendingDropVideos = []; if (videoDropZonePreview) { videoDropZonePreview.innerHTML = ''; videoDropZonePreview.style.display = 'none'; }
+      closeModal(modalAddVideo); renderActiveScene(); save();
+      showToast(`${added} video${added > 1 ? 's' : ''} added!`);
+    });
+  }
+
+  /* ---- CONTEXT FORM SUBMIT ---- */
+  if (formAddContext) {
+    formAddContext.addEventListener('submit', e => {
+      e.preventDefault();
+      const scene = getActiveScene(); if (!scene) return;
+      const category = selectContextCategory ? selectContextCategory.value : 'Narration';
+      const elemId   = `ctx_${Date.now()}_${Math.random().toString(36).slice(2,5)}`;
+      scene.elements.push({ id: elemId, type: 'context', category, text: '' });
+      closeModal(modalAddContext); renderActiveScene(); save();
+      setTimeout(() => {
+        const newTa = sceneElementsGrid.querySelector(`textarea[data-elemid='${elemId}']`);
+        if (newTa) newTa.focus();
+      }, 80);
+      showToast(`${category} box added — type directly in the scene!`);
+    });
+  }
+
+  if (selectContextCategory) {
+    selectContextCategory.addEventListener('change', () => {
+      const isMaster = selectContextCategory.value === 'Master Prompt';
+      const limitText = document.getElementById('context-limit-text');
+      if (limitText) {
+        limitText.innerHTML = isMaster
+          ? `<strong>Master Prompt</strong> — limited to <strong>3,000 characters</strong>. Text is typed directly in the scene.`
+          : `Narration / Technical / Conversation — up to <strong>10,000 words</strong>. Text is typed directly in the scene.`;
+      }
+    });
+  }
 
   /* ===================================================================
      DRAG & DROP + CLIPBOARD PASTE ON DROP ZONE
@@ -600,43 +1188,106 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupDropZone() {
     if (!imageDropZone) return;
 
-    // Click to browse
-    btnBrowseFile.addEventListener('click', () => inputFileImage.click());
-    inputFileImage.addEventListener('change', () => {
-      for (const file of inputFileImage.files) {
-        if (!validateSize(file)) return;
-        queueFileForDrop(file);
-      }
-    });
+    if (btnBrowseFile) btnBrowseFile.addEventListener('click', () => inputFileImage.click());
+    if (inputFileImage) {
+      inputFileImage.addEventListener('change', () => {
+        const files = Array.from(inputFileImage.files);
+        for (const file of files) {
+          if (pendingDropImages.length >= 10) {
+            showToast('Maximum 10 images can be selected at a time!', 'warning');
+            break;
+          }
+          if (!validateSize(file)) continue;
+          queueFileForDrop(file);
+        }
+      });
+    }
 
-    // Drag events
     imageDropZone.addEventListener('dragover', e => { e.preventDefault(); imageDropZone.classList.add('drag-over'); });
     imageDropZone.addEventListener('dragleave', () => imageDropZone.classList.remove('drag-over'));
     imageDropZone.addEventListener('drop', e => {
       e.preventDefault(); imageDropZone.classList.remove('drag-over');
-      const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
-      const items = [...e.dataTransfer.items];
-      if (files.length > 0) {
-        files.forEach(f => { if (!validateSize(f)) return; queueFileForDrop(f); });
-      } else {
-        // Try image from items
-        items.forEach(item => {
-          if (item.kind === 'file' && item.type.startsWith('image/')) {
-            const f = item.getAsFile(); if (f && validateSize(f)) queueFileForDrop(f);
-          }
-        });
+      let files = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+      if (files.length === 0 && e.dataTransfer.items) {
+        files = [...e.dataTransfer.items]
+          .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+          .map(item => item.getAsFile())
+          .filter(f => f !== null);
+      }
+      for (const f of files) {
+        if (pendingDropImages.length >= 10) {
+          showToast('Maximum 10 images can be selected at a time!', 'warning');
+          break;
+        }
+        if (!validateSize(f)) continue;
+        queueFileForDrop(f);
       }
     });
 
-    // Paste from clipboard (on the modal, not the whole window, to avoid conflicts)
-    modalAddImage.addEventListener('paste', e => {
-      const items = [...e.clipboardData.items].filter(i => i.type.startsWith('image/'));
-      if (!items.length) return;
-      items.forEach(item => {
-        const blob = item.getAsFile(); if (blob && validateSize(blob)) queueFileForDrop(blob, 'pasted_image.png');
+    if (modalAddImage) {
+      modalAddImage.addEventListener('paste', e => {
+        const items = [...e.clipboardData.items].filter(i => i.type.startsWith('image/'));
+        if (!items.length) return;
+        for (const item of items) {
+          if (pendingDropImages.length >= 10) {
+            showToast('Maximum 10 images can be selected at a time!', 'warning');
+            break;
+          }
+          const blob = item.getAsFile();
+          if (blob && validateSize(blob)) queueFileForDrop(blob, 'pasted_image.png');
+        }
+        e.preventDefault();
       });
-      e.preventDefault();
+    }
+  }
+
+  function setupVideoDropZone() {
+    if (!videoDropZone) return;
+
+    if (btnBrowseVideoFile) btnBrowseVideoFile.addEventListener('click', () => inputFileVideo.click());
+    if (inputFileVideo) {
+      inputFileVideo.addEventListener('change', () => {
+        const files = Array.from(inputFileVideo.files);
+        for (const file of files) {
+          if (pendingDropVideos.length >= 10) {
+            showToast('Maximum 10 videos can be selected at a time!', 'warning');
+            break;
+          }
+          if (!validateSize(file)) continue;
+          queueVideoForDrop(file);
+        }
+      });
+    }
+
+    videoDropZone.addEventListener('dragover', e => { e.preventDefault(); videoDropZone.classList.add('drag-over'); });
+    videoDropZone.addEventListener('dragleave', () => videoDropZone.classList.remove('drag-over'));
+    videoDropZone.addEventListener('drop', e => {
+      e.preventDefault(); videoDropZone.classList.remove('drag-over');
+      const files = [...e.dataTransfer.files].filter(f => f.type.startsWith('video/'));
+      for (const f of files) {
+        if (pendingDropVideos.length >= 10) {
+          showToast('Maximum 10 videos can be selected at a time!', 'warning');
+          break;
+        }
+        if (!validateSize(f)) continue;
+        queueVideoForDrop(f);
+      }
     });
+  }
+
+  async function queueVideoForDrop(file, nameOverride) {
+    const dataUrl = await readFileAsDataUrl(file);
+    const entry = { dataUrl, blob: file, fileName: nameOverride || file.name };
+    pendingDropVideos.push(entry);
+
+    if (videoDropZonePreview) {
+      const vid = document.createElement('video');
+      vid.src = dataUrl; vid.className = 'drop-zone-preview-video'; vid.title = entry.fileName;
+      vid.muted = true;
+      vid.addEventListener('loadeddata', () => { vid.currentTime = 1; });
+      videoDropZonePreview.appendChild(vid);
+      videoDropZonePreview.style.display = 'flex';
+    }
   }
 
   async function queueFileForDrop(file, nameOverride) {
@@ -644,11 +1295,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const entry = { dataUrl, blob: file, fileName: nameOverride || file.name };
     pendingDropImages.push(entry);
 
-    // Show thumbnail preview in drop zone
-    const img = document.createElement('img');
-    img.src = dataUrl; img.className = 'drop-zone-preview-img'; img.title = entry.fileName;
-    dropZonePreview.appendChild(img);
-    dropZonePreview.style.display = 'flex';
+    if (dropZonePreview) {
+      const img = document.createElement('img');
+      img.src = dataUrl; img.className = 'drop-zone-preview-img'; img.title = entry.fileName;
+      dropZonePreview.appendChild(img);
+      dropZonePreview.style.display = 'flex';
+    }
   }
 
   function readFileAsDataUrl(file) {
@@ -660,9 +1312,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function validateSize(file) {
-    const MAX = 20 * 1024 * 1024; // 20 MB
-    if (file.size > MAX) { showToast(`File "${file.name}" exceeds 20 MB limit!`, 'warning'); return false; }
+  function validateSize(file, customMaxMB) {
+    const maxMB = customMaxMB || 1024;
+    const MAX = maxMB * 1024 * 1024;
+    if (file.size > MAX) {
+      const limitStr = maxMB >= 1024 ? `${(maxMB / 1024).toFixed(0)} GB` : `${maxMB} MB`;
+      showToast(`File "${file.name}" exceeds ${limitStr} limit!`, 'warning');
+      return false;
+    }
     return true;
   }
 
@@ -688,18 +1345,20 @@ document.addEventListener('DOMContentLoaded', () => {
     sketchCanvas.addEventListener('mouseup', stop); sketchCanvas.addEventListener('mouseleave', stop);
     sketchCanvas.addEventListener('touchstart', start); sketchCanvas.addEventListener('touchmove', draw); sketchCanvas.addEventListener('touchend', stop);
 
-    btnClearSketch.addEventListener('click', clearSketch);
-    btnOpenSketch.addEventListener('click', () => { closeModal(modalAddImage); openModal(modalSketchPad); clearSketch(); });
-    btnSaveSketch.addEventListener('click', () => {
-      sketchCanvas.toBlob(blob => {
-        const scene = getActiveScene(); if (!scene) return;
-        const elemId = `img_${Date.now()}_sketch`;
-        const dataUrl = sketchCanvas.toDataURL('image/png');
-        rawBlobStore[elemId] = blob;
-        scene.elements.push({ id: elemId, type: 'image', src: dataUrl, displaySrc: dataUrl, fileName: 'doodle.png', alt: 'Sketch Doodle' });
-        closeModal(modalSketchPad); renderActiveScene(); save(); showToast('Sketch saved!');
-      }, 'image/png');
-    });
+    if (btnClearSketch) btnClearSketch.addEventListener('click', clearSketch);
+    if (btnOpenSketch) btnOpenSketch.addEventListener('click', () => { closeModal(modalAddImage); openModal(modalSketchPad); clearSketch(); });
+    if (btnSaveSketch) {
+      btnSaveSketch.addEventListener('click', () => {
+        sketchCanvas.toBlob(blob => {
+          const scene = getActiveScene(); if (!scene) return;
+          const elemId = `img_${Date.now()}_sketch`;
+          const dataUrl = sketchCanvas.toDataURL('image/png');
+          rawBlobStore[elemId] = blob;
+          scene.elements.push({ id: elemId, type: 'image', src: dataUrl, displaySrc: dataUrl, fileName: 'doodle.png', alt: 'Sketch Doodle' });
+          closeModal(modalSketchPad); renderActiveScene(); save(); showToast('Sketch saved!');
+        }, 'image/png');
+      });
+    }
   }
 
   function clearSketch() {
@@ -707,38 +1366,43 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ===================================================================
-     GLOBAL LIVE SEARCH
+     GLOBAL LIVE SEARCH & TRASH
   =================================================================== */
-  inputGlobalSearch.addEventListener('input', () => {
-    state.searchQuery = inputGlobalSearch.value.trim();
-    btnClearSearch.style.display = state.searchQuery ? 'inline-block' : 'none';
-    if (state.searchQuery) {
-      const match = state.scenes.find(sc =>
-        sc.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-        (sc.description||'').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-        sc.elements.some(el => (el.text||'').toLowerCase().includes(state.searchQuery.toLowerCase()) || (el.alt||'').toLowerCase().includes(state.searchQuery.toLowerCase()))
-      );
-      if (match && match.id !== state.activeSceneId) state.activeSceneId = match.id;
-    }
-    renderSidebar(); renderActiveScene();
-    if (state.viewSceneId) openSceneView(state.viewSceneId);
-  });
+  if (inputGlobalSearch) {
+    inputGlobalSearch.addEventListener('input', () => {
+      state.searchQuery = inputGlobalSearch.value.trim();
+      if (btnClearSearch) btnClearSearch.style.display = state.searchQuery ? 'inline-block' : 'none';
+      if (state.searchQuery) {
+        const match = state.scenes.find(sc =>
+          sc.title.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          (sc.description||'').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          sc.elements.some(el => (el.text||'').toLowerCase().includes(state.searchQuery.toLowerCase()) || (el.alt||'').toLowerCase().includes(state.searchQuery.toLowerCase()) || (el.prompt||'').toLowerCase().includes(state.searchQuery.toLowerCase()))
+        );
+        if (match && match.id !== state.activeSceneId) state.activeSceneId = match.id;
+      }
+      renderSidebar(); renderActiveScene();
+      if (state.viewSceneId) openSceneView(state.viewSceneId, state.viewModeSource);
+    });
+  }
 
-  btnClearSearch.addEventListener('click', () => {
-    inputGlobalSearch.value = ''; state.searchQuery = ''; btnClearSearch.style.display = 'none';
-    renderSidebar(); renderActiveScene();
-  });
+  if (btnClearSearch) {
+    btnClearSearch.addEventListener('click', () => {
+      if (inputGlobalSearch) inputGlobalSearch.value = '';
+      state.searchQuery = ''; btnClearSearch.style.display = 'none';
+      renderSidebar(); renderActiveScene();
+    });
+  }
 
-  /* ===================================================================
-     TRASH BIN
-  =================================================================== */
   function pushToTrash(type, data, sceneId) {
     state.trash.push({ id: `trash_${Date.now()}`, type, data, sceneId, deletedAt: new Date().toLocaleTimeString() });
   }
 
-  btnOpenTrash.addEventListener('click', () => { renderTrashItems(); openModal(modalTrashBin); });
+  if (btnOpenTrash) {
+    btnOpenTrash.addEventListener('click', () => { renderTrashItems(); openModal(modalTrashBin); });
+  }
 
   function renderTrashItems() {
+    if (!trashItemsContainer) return;
     trashItemsContainer.innerHTML = '';
     if (!state.trash.length) {
       trashItemsContainer.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:2rem;">Trash is empty.</p>'; return;
@@ -772,32 +1436,46 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  btnEmptyTrash.addEventListener('click', () => {
-    if (!state.trash.length || !confirm('Permanently purge all trash? Cannot be undone.')) return;
-    state.trash = []; renderTrashItems(); save(); showToast('Trash emptied!');
-  });
+  if (btnEmptyTrash) {
+    btnEmptyTrash.addEventListener('click', () => {
+      if (!state.trash.length || !confirm('Permanently purge all trash? Cannot be undone.')) return;
+      state.trash = []; renderTrashItems(); save(); showToast('Trash emptied!');
+    });
+  }
 
   /* ===================================================================
-     PRESENTATION MODE
+     PRESENTATION MODE & EXPORT
   =================================================================== */
-  btnNavPresent.addEventListener('click', () => {
-    if (!state.scenes.length) { showToast('Add scenes first!', 'warning'); return; }
-    state.presentIndex = 0;
-    presentStoryTitle.textContent = state.storyName;
-    presentTotalScenes.textContent = state.scenes.length;
-    openModal(modalPresentation); renderPresentSlide();
-  });
+  if (btnNavPresent) {
+    btnNavPresent.addEventListener('click', () => {
+      if (!state.scenes.length) { showToast('Add scenes first!', 'warning'); return; }
+      state.presentIndex = 0;
+      if (presentStoryTitle) presentStoryTitle.textContent = state.storyName;
+      if (presentTotalScenes) presentTotalScenes.textContent = state.scenes.length;
+      openModal(modalPresentation); renderPresentSlide();
+    });
+  }
 
   function renderPresentSlide() {
-    const scene = state.scenes[state.presentIndex]; if (!scene) return;
-    presentCurrentIdx.textContent = state.presentIndex + 1;
+    const scene = state.scenes[state.presentIndex]; if (!scene || !presentSlideContent) return;
+    if (presentCurrentIdx) presentCurrentIdx.textContent = state.presentIndex + 1;
     const imgs = scene.elements.filter(el => el.type === 'image');
+    const vids = scene.elements.filter(el => el.type === 'video');
     const ctxs = scene.elements.filter(el => el.type === 'context');
     let html = `<h2 style="font-family:var(--font-heading);font-size:1.8rem;color:#fff;margin-bottom:.5rem;">${escHtml(scene.title)}</h2>`;
     if (scene.description) html += `<p style="color:var(--text-muted);margin-bottom:1rem;">${escHtml(scene.description)}</p>`;
     if (imgs.length) {
       html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:1rem;">`;
-      imgs.forEach(img => { html += `<div class="image-16-9-wrapper" style="border-radius:8px;"><img src="${img.displaySrc || img.src}" alt="${escHtml(img.alt||'')}"></div>`; });
+      imgs.forEach(img => {
+        html += `<div class="image-16-9-wrapper" style="border-radius:8px;"><img src="${img.displaySrc || img.src}" alt="${escHtml(img.alt||'')}"></div>`;
+      });
+      html += `</div>`;
+    }
+    if (vids.length) {
+      html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem;">`;
+      vids.forEach(vid => {
+        html += `<div class="video-16-9-wrapper" style="border-radius:8px;"><video src="${vid.displaySrc || vid.src}" controls preload="metadata"></video></div>`;
+      });
       html += `</div>`;
     }
     ctxs.forEach(c => {
@@ -805,33 +1483,158 @@ document.addEventListener('DOMContentLoaded', () => {
         <small style="color:var(--accent-cyan);font-weight:700;">${escHtml(c.category)}</small>
         <p style="color:#fff;margin-top:4px;">${escHtml(c.text)}</p></div>`;
     });
-    if (!imgs.length && !ctxs.length) html += `<p style="color:var(--text-dim);text-align:center;padding:2rem;">No content in this scene.</p>`;
+    if (!imgs.length && !vids.length && !ctxs.length) html += `<p style="color:var(--text-dim);text-align:center;padding:2rem;">No content in this scene.</p>`;
     presentSlideContent.innerHTML = html;
   }
 
-  btnPresentPrev.addEventListener('click', () => { if (state.presentIndex > 0) { state.presentIndex--; renderPresentSlide(); } });
-  btnPresentNext.addEventListener('click', () => { if (state.presentIndex < state.scenes.length - 1) { state.presentIndex++; renderPresentSlide(); } });
-  document.addEventListener('keydown', e => {
-    if (modalPresentation.classList.contains('active')) {
-      if (e.key === 'ArrowLeft') btnPresentPrev.click();
-      if (e.key === 'ArrowRight') btnPresentNext.click();
-      if (e.key === 'Escape') closeModal(modalPresentation);
-    }
-  });
+  if (btnPresentPrev) btnPresentPrev.addEventListener('click', () => { if (state.presentIndex > 0) { state.presentIndex--; renderPresentSlide(); } });
+  if (btnPresentNext) btnPresentNext.addEventListener('click', () => { if (state.presentIndex < state.scenes.length - 1) { state.presentIndex++; renderPresentSlide(); } });
+
+  if (btnNavExportJson) {
+    btnNavExportJson.addEventListener('click', () => {
+      const data = JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes }, null, 2);
+      const a = document.createElement('a');
+      a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(data);
+      a.download = `${state.storyName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_storyboard.json`;
+      a.click(); showToast('JSON exported!');
+    });
+  }
 
   /* ===================================================================
-     EXPORT
+     TASKS & NOTES FEATURE
   =================================================================== */
-  btnNavExportJson.addEventListener('click', () => {
-    const data = JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes }, null, 2);
-    const a = document.createElement('a');
-    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(data);
-    a.download = `${state.storyName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_storyboard.json`;
-    a.click(); showToast('JSON exported!');
-  });
+  function setupTasksNotes() {
+    const btnTasksNotes      = document.getElementById('btn-tasks-notes');
+    const modalTasksNotes    = document.getElementById('modal-tasks-notes');
+    const tnTabTasks         = document.getElementById('tn-tab-tasks');
+    const tnTabNotes         = document.getElementById('tn-tab-notes');
+    const tnPanelTasks       = document.getElementById('tn-panel-tasks');
+    const tnPanelNotes       = document.getElementById('tn-panel-notes');
+    const tnTasksList        = document.getElementById('tn-tasks-list');
+    const tnTaskInput        = document.getElementById('tn-task-input');
+    const tnTasksEmpty       = document.getElementById('tn-tasks-empty');
+    const tnNotesTextarea    = document.getElementById('tn-notes-textarea');
+    const btnTnExpand        = document.getElementById('btn-tn-expand');
+    const tnModalBox         = modalTasksNotes ? modalTasksNotes.querySelector('.tasks-notes-modal-box') : null;
+
+    if (!btnTasksNotes || !modalTasksNotes) return;
+
+    // Expand/Collapse toggle
+    let isExpanded = false;
+    btnTnExpand.addEventListener('click', () => {
+      isExpanded = !isExpanded;
+      tnModalBox.classList.toggle('tn-expanded', isExpanded);
+      btnTnExpand.innerHTML = isExpanded
+        ? '<i class="fa-solid fa-compress"></i>'
+        : '<i class="fa-solid fa-expand"></i>';
+      btnTnExpand.title = isExpanded ? 'Collapse' : 'Expand';
+    });
+
+    // Reset expand state when modal closes
+    const resetExpand = () => {
+      isExpanded = false;
+      tnModalBox.classList.remove('tn-expanded');
+      btnTnExpand.innerHTML = '<i class="fa-solid fa-expand"></i>';
+      btnTnExpand.title = 'Expand';
+    };
+
+    // Listen for modal close (clicking overlay or close button)
+    modalTasksNotes.addEventListener('click', (e) => {
+      if (e.target === modalTasksNotes) resetExpand();
+    });
+    modalTasksNotes.querySelectorAll('.btn-close-modal').forEach(btn => {
+      btn.addEventListener('click', () => resetExpand());
+    });
+
+    // Open modal
+    btnTasksNotes.addEventListener('click', () => {
+      openModal(modalTasksNotes);
+      renderTasksList();
+      tnNotesTextarea.value = state.notes || '';
+      tnTaskInput.focus();
+    });
+
+    // Tab switching
+    function switchTab(tab) {
+      tnTabTasks.classList.toggle('active', tab === 'tasks');
+      tnTabNotes.classList.toggle('active', tab === 'notes');
+      tnPanelTasks.classList.toggle('active', tab === 'tasks');
+      tnPanelNotes.classList.toggle('active', tab === 'notes');
+      if (tab === 'tasks') tnTaskInput.focus();
+      if (tab === 'notes') tnNotesTextarea.focus();
+    }
+
+    tnTabTasks.addEventListener('click', () => switchTab('tasks'));
+    tnTabNotes.addEventListener('click', () => switchTab('notes'));
+
+    // Add task on Enter
+    tnTaskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const text = tnTaskInput.value.trim();
+        if (!text) return;
+        const task = {
+          id: `task_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+          text: text,
+          completed: false
+        };
+        state.tasks.push(task);
+        tnTaskInput.value = '';
+        renderTasksList();
+        save();
+      }
+    });
+
+    // Render tasks
+    function renderTasksList() {
+      tnTasksList.innerHTML = '';
+      const hasTasks = state.tasks.length > 0;
+      tnTasksEmpty.style.display = hasTasks ? 'none' : 'flex';
+
+      state.tasks.forEach((task) => {
+        const item = document.createElement('div');
+        item.className = `tn-task-item ${task.completed ? 'completed' : ''}`;
+        item.innerHTML = `
+          <div class="tn-checkbox ${task.completed ? 'checked' : ''}" data-taskid="${task.id}"></div>
+          <span class="tn-task-text">${escHtml(task.text)}</span>
+          <button class="tn-task-delete" data-taskid="${task.id}" title="Delete task">
+            <i class="fa-solid fa-xmark"></i>
+          </button>`;
+
+        // Toggle checkbox
+        item.querySelector('.tn-checkbox').addEventListener('click', () => {
+          task.completed = !task.completed;
+          renderTasksList();
+          save();
+        });
+
+        // Delete task
+        item.querySelector('.tn-task-delete').addEventListener('click', () => {
+          state.tasks = state.tasks.filter(t => t.id !== task.id);
+          renderTasksList();
+          save();
+        });
+
+        tnTasksList.appendChild(item);
+      });
+
+      // Auto-scroll to bottom
+      tnTasksList.scrollTop = tnTasksList.scrollHeight;
+    }
+
+    // Notes auto-save on input
+    let notesDebounce = null;
+    tnNotesTextarea.addEventListener('input', () => {
+      clearTimeout(notesDebounce);
+      notesDebounce = setTimeout(() => {
+        state.notes = tnNotesTextarea.value;
+        save();
+      }, 400);
+    });
+  }
 
   /* ===================================================================
-     HELPERS
+     HELPERS & UTILITIES
   =================================================================== */
   function openModal(m)  { if (m) m.classList.add('active'); }
   function closeModal(m) { if (m) m.classList.remove('active'); }
@@ -879,6 +1682,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const words = str.trim().split(/\s+/);
     return words.slice(0, limit).join(' ');
   }
+
+  if (btnModalExpandCopy) {
+    btnModalExpandCopy.addEventListener('click', () => {
+      copyTextToClipboard(activeExpandText);
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    const expandBtn = e.target.closest('.btn-expand-prompt, .btn-expand-text');
+    if (expandBtn) {
+      const text = expandBtn.dataset.text || '';
+      const title = expandBtn.dataset.title || 'Full View';
+      openExpandTextModal(title, text);
+    }
+  });
 
   init();
 });

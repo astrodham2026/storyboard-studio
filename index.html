@@ -6,7 +6,7 @@
   <title>Storyboard Studio - Interactive Scene Creator</title>
   <meta name="description" content="Professional web application for creating, organizing, and presenting visual storyboards with 16:9 images, narration, technical aspects, conversation notes, and scene search.">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2.2">
 </head>
 <body>
 
@@ -17,11 +17,16 @@
     </div>
     <h1 class="hero-title">Craft Stories Scene by Scene</h1>
     <p class="hero-subtitle">
-      Design unlimited cinematic storyboards with 16:9 image frames, drag & drop upload, dialogue context boxes, and scene search navigation.
+      Design unlimited cinematic storyboards with 16:9 image frames, video clips, dialogue context boxes, and scene search navigation.
     </p>
-    <button id="btn-hero-start" class="btn btn-start-hero">
-      <i class="fa-solid fa-play"></i> START STORYBOARD
-    </button>
+    <div class="hero-actions" style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-bottom: 2rem;">
+      <button id="btn-hero-add-story" class="btn btn-primary btn-start-hero" style="padding: 14px 32px; font-size: 1.1rem;">
+        <i class="fa-solid fa-plus-circle"></i> ADD STORY
+      </button>
+      <button id="btn-hero-stories" class="btn btn-secondary btn-start-hero" style="padding: 14px 32px; font-size: 1.1rem; background: rgba(255,255,255,0.08); border: 1px solid var(--border-highlight);">
+        <i class="fa-solid fa-book-bookmark" style="color: var(--accent-cyan);"></i> STORIES (<span id="landing-stories-count">0</span>)
+      </button>
+    </div>
     <div class="feature-grid">
       <div class="feature-card">
         <i class="fa-solid fa-layer-group"></i>
@@ -30,13 +35,57 @@
       </div>
       <div class="feature-card">
         <i class="fa-solid fa-image"></i>
-        <h3>16:9 Images (4-per-row)</h3>
-        <p>Drag & drop, paste from clipboard, upload up to 20 MB. Download/copy preserves original file quality.</p>
+        <h3>16:9 Images & Videos</h3>
+        <p>Drag & drop, paste from clipboard, upload up to 1 GB media files with prompt context annotations.</p>
       </div>
       <div class="feature-card">
         <i class="fa-solid fa-comments"></i>
-        <h3>Context Categories</h3>
-        <p>Annotate frames with Narration, Technical Aspects, and Conversation notes.</p>
+        <h3>Context & Prompts</h3>
+        <p>Annotate frames with Narration, Technical Aspects, Conversation notes, and Prompt boxes.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== STORIES GALLERY LIST SCREEN ==================== -->
+  <section id="stories-screen" class="screen" style="flex-direction: column; width: 100vw; height: 100vh; background: var(--bg-dark);">
+    <header class="top-nav">
+      <div class="nav-brand">
+        <i class="fa-solid fa-film"></i>
+        <h1>Storyboard Studio</h1>
+        <div class="story-title-display">
+          <i class="fa-solid fa-book-bookmark" style="color: var(--accent-cyan);"></i>
+          <span class="story-title-text">Saved Stories Gallery</span>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <button id="btn-back-to-home-from-stories" class="btn btn-secondary btn-sm">
+          <i class="fa-solid fa-arrow-left"></i> Back to Home
+        </button>
+        <button id="btn-stories-add-new" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus"></i> Add Story
+        </button>
+      </div>
+    </header>
+
+    <div class="stories-body-container" style="flex: 1; padding: 2rem; overflow-y: auto; display: flex; flex-direction: column; max-width: 1200px; width: 100%; margin: 0 auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2 style="font-family: var(--font-heading); font-size: 1.8rem; font-weight: 700; color: #fff;">
+            <i class="fa-solid fa-folder-open" style="color: var(--accent-cyan);"></i> My Saved Stories (<span id="stories-total-badge">0</span>)
+          </h2>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">Manage, view, or edit all your visual storyboards.</p>
+        </div>
+        <div class="search-container" style="width: 280px;">
+          <i class="fa-solid fa-magnifying-glass" style="color: var(--text-muted);"></i>
+          <input type="text" id="input-stories-search" placeholder="Search saved stories...">
+        </div>
+      </div>
+
+      <!-- Scrollable stories list wrapper -->
+      <div id="stories-scroll-wrapper" class="stories-scroll-wrapper" style="flex: 1; overflow-y: auto; max-height: calc(100vh - 220px); padding-right: 8px;">
+        <div id="stories-grid-container" class="stories-grid-container">
+          <!-- Rendered dynamically -->
+        </div>
       </div>
     </div>
   </section>
@@ -62,7 +111,14 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
+      <!-- TASKS & NOTES BUTTON -->
+      <button id="btn-tasks-notes" class="btn btn-secondary btn-sm btn-tasks-notes-trigger" title="Tasks & Notes">
+        <i class="fa-solid fa-list-check" style="color: var(--accent-emerald);"></i> Tasks & Notes
+      </button>
       <div class="nav-actions">
+        <button id="btn-nav-stories-list" class="btn btn-secondary btn-sm" title="Back to Stories Gallery">
+          <i class="fa-solid fa-arrow-left"></i> Stories
+        </button>
         <button id="btn-open-trash" class="btn btn-secondary btn-sm" title="Trash Recycling Bin">
           <i class="fa-solid fa-trash-can" style="color: #f87171;"></i> Trash (<span id="trash-count">0</span>)
         </button>
@@ -184,7 +240,7 @@
 
   <!-- 3. ADD CONTENT SELECTOR MODAL -->
   <div id="modal-content-type" class="modal-overlay">
-    <div class="modal-box" style="max-width: 540px;">
+    <div class="modal-box" style="max-width: 600px;">
       <div class="modal-header">
         <h2><i class="fa-solid fa-layer-group" style="color: var(--primary);"></i> Add Content to Scene</h2>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
@@ -194,12 +250,27 @@
         <div id="opt-select-image" class="option-box image-opt">
           <i class="fa-solid fa-image"></i>
           <h4>1. IMAGES</h4>
-          <p>Drag & drop, paste from clipboard, or upload up to 20 MB. 4 per row, 16:9 ratio.</p>
+          <p>Drag & drop, paste from clipboard, or upload up to 1 GB. 4 per row, 16:9 ratio.</p>
+        </div>
+        <div id="opt-select-video" class="option-box video-opt">
+          <i class="fa-solid fa-video"></i>
+          <h4>2. VIDEOS</h4>
+          <p>Upload video files up to 1 GB. 3 per row, 21:9 cinematic ratio with playback controls.</p>
         </div>
         <div id="opt-select-context" class="option-box context-opt">
           <i class="fa-solid fa-message"></i>
-          <h4>2. CONTEXT BOX</h4>
+          <h4>3. CONTEXT BOX</h4>
           <p>Add Narration, Technical Aspects, or Conversation notes.</p>
+        </div>
+        <div id="opt-select-image-prompt" class="option-box image-prompt-opt">
+          <i class="fa-solid fa-file-image" style="color: var(--accent-cyan);"></i>
+          <h4>4. IMAGE WITH PROMPT</h4>
+          <p>16:9 image (up to 1 GB) with attached Prompt box (max 100,000 chars / 1 Lakh).</p>
+        </div>
+        <div id="opt-select-video-prompt" class="option-box video-prompt-opt">
+          <i class="fa-solid fa-film" style="color: #a78bfa;"></i>
+          <h4>5. VIDEO WITH PROMPT</h4>
+          <p>21:9 video (up to 1 GB) with attached Prompt box (max 100,000 chars / 1 Lakh).</p>
         </div>
       </div>
     </div>
@@ -209,7 +280,7 @@
   <div id="modal-add-image" class="modal-overlay">
     <div class="modal-box" style="max-width: 580px;">
       <div class="modal-header">
-        <h2><i class="fa-solid fa-file-image" style="color: var(--accent-cyan);"></i> Insert Image (max 20 MB)</h2>
+        <h2 id="modal-image-title"><i class="fa-solid fa-file-image" style="color: var(--accent-cyan);"></i> Insert Image (max 1 GB)</h2>
         <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form id="form-add-image">
@@ -223,12 +294,12 @@
           <div class="drop-zone-icon">
             <i class="fa-solid fa-cloud-arrow-up"></i>
           </div>
-          <p class="drop-zone-text">Drag & drop an image here</p>
-          <p class="drop-zone-sub">or <strong>Ctrl+V</strong> to paste from clipboard</p>
-          <p class="drop-zone-limit">Max file size: <strong>20 MB</strong></p>
-          <input type="file" id="input-file-image" accept="image/*" style="display:none;">
+          <p class="drop-zone-text">Drag & drop image(s) here</p>
+          <p class="drop-zone-sub">or <strong>Ctrl+V</strong> to paste (Select up to 10 files at a time)</p>
+          <p class="drop-zone-limit">Max file size: <strong>1 GB per file</strong></p>
+          <input type="file" id="input-file-image" accept="image/*" multiple style="display:none;">
           <button type="button" id="btn-browse-file" class="btn btn-secondary btn-sm" style="margin-top: 10px;">
-            <i class="fa-solid fa-folder-open"></i> Browse File
+            <i class="fa-solid fa-folder-open"></i> Browse File(s)
           </button>
           <div id="drop-zone-preview" class="drop-zone-preview" style="display:none;"></div>
         </div>
@@ -245,9 +316,72 @@
           </button>
         </div>
 
+        <!-- PROMPT INPUT FIELD (Shown when Image with Prompt is selected) -->
+        <div class="form-group" id="group-image-prompt" style="margin-top: 12px; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="margin-bottom: 0; color: var(--accent-cyan); font-weight: 600;">
+              <i class="fa-solid fa-terminal"></i> Image Prompt (Max 100,000 characters / 1 Lakh)
+            </label>
+            <span id="prompt-img-char-count" style="font-size: 0.8rem; color: var(--text-muted);">0 / 100,000 chars</span>
+          </div>
+          <textarea id="input-image-prompt" class="form-input" style="height: 120px; resize: vertical;" placeholder="Enter image prompt details (up to 100,000 characters)..." maxlength="100000"></textarea>
+        </div>
+
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
           <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
           <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Add Image(s)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4B. ADD VIDEO MODAL (DRAG & DROP + FILE + URL) -->
+  <div id="modal-add-video" class="modal-overlay">
+    <div class="modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <h2 id="modal-video-title"><i class="fa-solid fa-video" style="color: #a78bfa;"></i> Insert Video (max 1 GB)</h2>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form id="form-add-video">
+        <div class="form-group">
+          <label>Video Caption / Description</label>
+          <input type="text" id="input-video-alt" class="form-input" placeholder="e.g. Hero jumps across rooftops in slow motion">
+        </div>
+
+        <!-- DRAG & DROP ZONE FOR VIDEOS -->
+        <div id="video-drop-zone" class="video-drop-zone">
+          <div class="drop-zone-icon">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+          </div>
+          <p class="drop-zone-text">Drag & drop video(s) here</p>
+          <p class="drop-zone-sub">Supports MP4, WebM, MOV (Select up to 10 files at a time)</p>
+          <p class="drop-zone-limit">Max file size: <strong>1 GB per file</strong></p>
+          <input type="file" id="input-file-video" accept="video/*" multiple style="display:none;">
+          <button type="button" id="btn-browse-video-file" class="btn btn-secondary btn-sm" style="margin-top: 10px;">
+            <i class="fa-solid fa-folder-open"></i> Browse Video File(s)
+          </button>
+          <div id="video-drop-zone-preview" class="drop-zone-preview" style="display:none;"></div>
+        </div>
+
+        <div class="form-group" style="margin-top: 12px;">
+          <label>Or Paste Video URL</label>
+          <input type="url" id="input-url-video" class="form-input" placeholder="https://example.com/clip.mp4">
+        </div>
+
+        <!-- PROMPT INPUT FIELD (Shown when Video with Prompt is selected) -->
+        <div class="form-group" id="group-video-prompt" style="margin-top: 12px; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label style="margin-bottom: 0; color: #a78bfa; font-weight: 600;">
+              <i class="fa-solid fa-terminal"></i> Video Prompt (Max 100,000 characters / 1 Lakh)
+            </label>
+            <span id="prompt-video-char-count" style="font-size: 0.8rem; color: var(--text-muted);">0 / 100,000 chars</span>
+          </div>
+          <textarea id="input-video-prompt" class="form-input" style="height: 120px; resize: vertical;" placeholder="Enter video prompt details (up to 100,000 characters)..." maxlength="100000"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 1.5rem;">
+          <button type="button" class="btn btn-secondary btn-close-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Add Video(s)</button>
         </div>
       </form>
     </div>
@@ -322,7 +456,31 @@
     </div>
   </div>
 
-  <!-- 8. PRESENTATION SLIDESHOW MODAL -->
+  <!-- 8. TEXT EXPAND POPUP MODAL -->
+  <div id="modal-expand-text" class="modal-overlay">
+    <div class="modal-box" style="max-width: 680px; width: 90vw;">
+      <div class="modal-header">
+        <h2 id="modal-expand-title" style="display: flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-up-right-and-down-left-from-center" style="color: var(--accent-cyan);"></i> Full View
+        </h2>
+        <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="expand-text-scroll-container" style="max-height: 55vh; min-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.35); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1.2rem; margin-bottom: 1.25rem; scrollbar-width: thin; scrollbar-color: var(--primary) rgba(15,21,35,0.8);">
+        <div id="modal-expand-content" style="font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.95rem; line-height: 1.7; color: var(--text-main); white-space: pre-wrap; word-break: break-word;"></div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+        <span id="modal-expand-meta" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 500;"></span>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-modal-expand-copy" class="btn btn-primary">
+            <i class="fa-solid fa-copy"></i> Copy Complete Text
+          </button>
+          <button class="btn btn-secondary btn-close-modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8B. PRESENTATION SLIDESHOW MODAL -->
   <div id="modal-presentation" class="modal-overlay" style="background: #000; align-items: center; justify-content: center;">
     <div style="width: 90vw; max-width: 1100px; display: flex; flex-direction: column; align-items: center;">
       <div style="width: 100%; display: flex; justify-content: space-between; color: var(--text-muted); margin-bottom: 1rem;">
@@ -338,9 +496,52 @@
     </div>
   </div>
 
+  <!-- 9. TASKS & NOTES POPUP MODAL -->
+  <div id="modal-tasks-notes" class="modal-overlay">
+    <div class="modal-box tasks-notes-modal-box" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-list-check" style="color: var(--accent-emerald);"></i> Tasks & Notes</h2>
+        <div class="tn-header-actions">
+          <button id="btn-tn-expand" class="tn-expand-btn" title="Expand">
+            <i class="fa-solid fa-expand"></i>
+          </button>
+          <button class="modal-close btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <!-- Toggle Tabs -->
+      <div class="tn-tabs">
+        <button id="tn-tab-tasks" class="tn-tab active" data-tab="tasks">
+          <i class="fa-solid fa-check-circle"></i> Tasks
+        </button>
+        <button id="tn-tab-notes" class="tn-tab" data-tab="notes">
+          <i class="fa-solid fa-sticky-note"></i> Notes
+        </button>
+      </div>
+      <!-- Tasks Panel -->
+      <div id="tn-panel-tasks" class="tn-panel active">
+        <div id="tn-tasks-list" class="tn-tasks-list">
+          <!-- Tasks rendered dynamically -->
+        </div>
+        <div class="tn-task-input-row">
+          <input type="text" id="tn-task-input" class="form-input tn-task-input" placeholder="Type a task and press Enter...">
+        </div>
+        <div id="tn-tasks-empty" class="tn-empty-state">
+          <i class="fa-solid fa-clipboard-list"></i>
+          <p>No tasks yet. Type above and press Enter to add one.</p>
+        </div>
+      </div>
+      <!-- Notes Panel -->
+      <div id="tn-panel-notes" class="tn-panel">
+        <div class="tn-notes-scroll-wrapper">
+          <textarea id="tn-notes-textarea" class="form-textarea tn-notes-textarea" placeholder="Write your notes here..."></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.2"></script>
 </body>
 </html>
