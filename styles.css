@@ -600,6 +600,36 @@ mark.search-highlight { background: #f59e0b; color: #000; font-weight: 700; bord
 }
 
 @media (max-width: 768px) {
+  /* MOBILE ROOT SCROLLBAR & OVERFLOW UNBLOCKED */
+  html, body {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Custom visible mobile scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+  }
+  ::-webkit-scrollbar-track {
+    background: rgba(10, 15, 30, 0.8) !important;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, var(--primary), var(--accent-cyan)) !important;
+    border-radius: 10px !important;
+  }
+
+  #app-screen.active,
+  #stories-screen.active,
+  #landing-screen.active {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-y: visible !important;
+  }
+
   /* TOP NAV MOBILE IMPROVEMENTS */
   .top-nav {
     height: auto;
@@ -656,9 +686,9 @@ mark.search-highlight { background: #f59e0b; color: #000; font-weight: 700; bord
   /* WORKSPACE & HORIZONTAL SCENE TAB SELECTOR ON MOBILE */
   .workspace-body {
     flex-direction: column;
-    height: auto;
+    height: auto !important;
     min-height: calc(100vh - 120px);
-    overflow-y: auto;
+    overflow-y: visible !important;
   }
   .sidebar {
     width: 100%;

@@ -205,24 +205,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Fetch cloud server persistent stories from promptee.site (api.php)
     try {
-      const res = await fetch('api.php');
+      const res = await fetch('api.php?t=' + Date.now()); // Prevent GET caching across devices
       if (res.ok) {
         const data = await res.json();
-        if (data.status === 'success' && Array.isArray(data.stories) && data.stories.length > 0) {
-          const storyMap = new Map();
-          // Load local stories first
-          state.stories.forEach(s => { if (s && s.id) storyMap.set(s.id, s); });
-          // Merge server stories (server takes priority if updated or missing locally)
-          data.stories.forEach(s => {
-            if (s && s.id) {
-              const existing = storyMap.get(s.id);
-              if (!existing || new Date(s.updatedAt || 0) >= new Date(existing.updatedAt || 0)) {
-                storyMap.set(s.id, s);
-              }
-            }
-          });
+        if (data.status === 'success' && Array.isArray(data.stories)) {
+          if (data.stories.length > 0) {
+            // Server is the Single Source of Truth for all devices!
+            state.stories = data.stories;
+          } else if (state.stories.length > 0) {
+            // First time setup: if server is empty but local has stories, push local stories to server
+            await syncStoriesToServer();
+          }
 
-          state.stories = Array.from(storyMap.values());
           localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
           updateLandingBadges();
 
@@ -231,15 +225,20 @@ document.addEventListener('DOMContentLoaded', () => {
             renderStoriesList();
           }
           if (state.activeStoryId) {
-            loadStoryToState(state.activeStoryId);
-            if (appScreen && appScreen.classList.contains('active')) {
-              renderActiveScene();
+            const found = state.stories.find(s => s.id === state.activeStoryId);
+            if (found) {
+              loadStoryToState(state.activeStoryId);
+              if (appScreen && appScreen.classList.contains('active')) {
+                renderActiveScene();
+              }
+            } else {
+              state.activeStoryId = null;
             }
           }
         }
       }
     } catch (err) {
-      console.log('Server cloud persistence sync offline or first run.', err);
+      console.log('Server cloud persistence sync offline or fallback.', err);
     }
   }
 
