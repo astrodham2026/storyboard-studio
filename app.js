@@ -628,29 +628,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderPromptBoxHTML(elemId, promptText) {
     const safeText = escHtml(promptText || '');
     return `
-      <div class="prompt-box-wrapper" style="margin-top: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: rgba(0,0,0,0.3); overflow: hidden;">
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(6,182,212,0.1); border-bottom: 1px solid var(--border-color);">
-          <span style="font-size: 0.78rem; font-weight: 700; color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-terminal"></i> Prompt
-          </span>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <button class="copy-icon-btn btn-copy-text" data-text="${safeText}" title="Copy Prompt">
-              <i class="fa-solid fa-copy"></i> Copy
-            </button>
-            <button class="expand-icon-btn btn-expand-text" data-text="${safeText}" data-title="Prompt Text" title="Expand Full View">
-              <i class="fa-solid fa-expand"></i> Expand
-            </button>
-          </div>
-        </div>
-        <div style="padding: 8px 10px; font-family: 'Courier New', monospace; font-size: 0.85rem; color: #e2e8f0; white-space: pre-wrap; word-break: break-word;">
-          ${highlightText(promptText)}
-        </div>
-        <div class="bottom-copy-bar">
-          <button class="expand-icon-btn btn-expand-text" data-text="${safeText}" data-title="Prompt Text" title="Expand Full View">
-            <i class="fa-solid fa-expand"></i> Expand
-          </button>
-          <button class="copy-icon-btn btn-copy-text" data-text="${safeText}" title="Copy Prompt">
+      <div class="prompt-compact-bar" style="margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(6,182,212,0.25); background: rgba(6,182,212,0.06);">
+        <span style="font-size: 0.8rem; font-weight: 600; color: var(--accent-cyan); display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-terminal"></i> Prompt Attached
+        </span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button class="btn btn-secondary btn-sm btn-copy-text" data-text="${safeText}" title="Copy Prompt" style="padding: 4px 8px; font-size: 0.78rem;">
             <i class="fa-solid fa-copy"></i> Copy
+          </button>
+          <button class="btn btn-primary btn-sm btn-expand-text" data-text="${safeText}" data-title="Prompt Text" title="Expand Full View" style="padding: 4px 10px; font-size: 0.78rem; background: linear-gradient(135deg, var(--accent-cyan), #0891b2); border: none;">
+            <i class="fa-solid fa-expand"></i> Expand Prompt
           </button>
         </div>
       </div>`;
