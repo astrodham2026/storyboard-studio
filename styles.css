@@ -45,10 +45,22 @@ body {
     radial-gradient(circle at 85% 85%, rgba(6,182,212,0.08) 0%, transparent 45%);
 }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--bg-dark); }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: rgba(10, 15, 35, 0.9); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--primary), var(--accent-cyan));
+  border-radius: 8px;
+  border: 2px solid rgba(10, 15, 35, 0.9);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--primary-hover), #0891b2);
+}
+
+/* Firefox scrollbar support */
+* {
+  scrollbar-width: auto;
+  scrollbar-color: var(--accent-cyan) rgba(10, 15, 35, 0.9);
+}
 
 /* ---- BUTTONS ---- */
 .btn {
@@ -71,11 +83,33 @@ body {
 .screen { display: none !important; opacity: 0; transition: opacity 0.3s ease; }
 .screen.active { display: flex !important; opacity: 1; }
 
-/* ---- LANDING SCREEN ---- */
+/* ---- LANDING SCREEN (HOME PAGE) ---- */
 #landing-screen.active {
-  min-height: 100vh; display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
-  text-align: center; padding: 2rem; overflow-y: auto;
+  height: 100vh;
+  max-height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: center;
+  padding: 3rem 1.5rem;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: auto;
+  scrollbar-color: var(--accent-cyan) rgba(10, 15, 35, 0.9);
+}
+
+#landing-screen.active::-webkit-scrollbar {
+  width: 10px !important;
+  display: block !important;
+}
+#landing-screen.active::-webkit-scrollbar-track {
+  background: rgba(10, 15, 35, 0.9) !important;
+}
+#landing-screen.active::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--primary), var(--accent-cyan)) !important;
+  border-radius: 8px !important;
 }
 
 .feature-grid {
