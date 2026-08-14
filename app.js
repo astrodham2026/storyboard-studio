@@ -173,7 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAllStories();
   }
 
-  function loadAllStories() {
+  async function loadAllStories() {
+    // 1. Load local cache first for instant UI response
     const rawAll = localStorage.getItem('storyboard_studio_all_stories');
     let loaded = [];
     if (rawAll) {
@@ -201,12 +202,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     state.stories = loaded;
     updateLandingBadges();
+
+    // 2. Fetch cloud server persistent stories from promptee.site (api.php)
+    try {
+      const res = await fetch('api.php');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success' && Array.isArray(data.stories) && data.stories.length > 0) {
+          const storyMap = new Map();
+          // Load local stories first
+          state.stories.forEach(s => { if (s && s.id) storyMap.set(s.id, s); });
+          // Merge server stories (server takes priority if updated or missing locally)
+          data.stories.forEach(s => {
+            if (s && s.id) {
+              const existing = storyMap.get(s.id);
+              if (!existing || new Date(s.updatedAt || 0) >= new Date(existing.updatedAt || 0)) {
+                storyMap.set(s.id, s);
+              }
+            }
+          });
+
+          state.stories = Array.from(storyMap.values());
+          localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
+          updateLandingBadges();
+
+          // Refresh current views if active
+          if (storiesScreen && storiesScreen.classList.contains('active')) {
+            renderStoriesList();
+          }
+          if (state.activeStoryId) {
+            loadStoryToState(state.activeStoryId);
+            if (appScreen && appScreen.classList.contains('active')) {
+              renderActiveScene();
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.log('Server cloud persistence sync offline or first run.', err);
+    }
   }
 
   function updateLandingBadges() {
     if (landingStoriesCount) landingStoriesCount.textContent = state.stories.length;
     if (storiesTotalBadge) storiesTotalBadge.textContent = state.stories.length;
   }
+
+  let serverSaveDebounce = null;
 
   function save() {
     if (!state.activeStoryId) {
@@ -240,6 +282,24 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('storyboard_studio_data', JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes, trash: state.trash }));
     updateTrashBadge();
     updateLandingBadges();
+
+    // Sync to promptee.site cloud hosting server asynchronously
+    clearTimeout(serverSaveDebounce);
+    serverSaveDebounce = setTimeout(() => {
+      syncStoriesToServer();
+    }, 400);
+  }
+
+  async function syncStoriesToServer() {
+    try {
+      await fetch('api.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_all', stories: state.stories })
+      });
+    } catch (e) {
+      console.warn('Server cloud save warning:', e);
+    }
   }
 
   function loadStoryToState(storyId) {
@@ -430,13 +490,20 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       // DELETE button
-      card.querySelector('.btn-story-delete').addEventListener('click', () => {
+      card.querySelector('.btn-story-delete').addEventListener('click', async () => {
         if (!confirm(`Delete story "${story.storyName}" permanently?`)) return;
         state.stories = state.stories.filter(s => s.id !== story.id);
         if (state.activeStoryId === story.id) state.activeStoryId = null;
         localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
         renderStoriesList();
         showToast('Story deleted');
+        try {
+          await fetch('api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete_story', id: story.id })
+          });
+        } catch(e) {}
       });
 
       storiesGridContainer.appendChild(card);
