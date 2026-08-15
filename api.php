@@ -5,9 +5,9 @@
  * Persists all stories directly on the website server so data is accessible anywhere on promptee.site.
  */
 
-ini_set('memory_limit', '256M');
-ini_set('post_max_size', '64M');
-ini_set('upload_max_filesize', '64M');
+ini_set('memory_limit', '512M');
+ini_set('post_max_size', '128M');
+ini_set('upload_max_filesize', '128M');
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -24,15 +24,21 @@ if (!file_exists($storageDir)) {
 }
 
 $allStoriesFile = $storageDir . '/stories_all.json';
+$backupFile     = $storageDir . '/stories_backup.json';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'POST') {
     $input = file_get_contents('php://input');
+    if (!$input || strlen($input) === 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Empty request payload']);
+        exit;
+    }
+    
     $data = json_decode($input, true);
     
     if (!$data) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid JSON payload']);
+        echo json_encode(['status' => 'error', 'message' => 'Invalid JSON payload format']);
         exit;
     }
     
@@ -41,10 +47,13 @@ if ($method === 'POST') {
     if ($action === 'save_all' && isset($data['stories']) && is_array($data['stories'])) {
         $stories = $data['stories'];
         $json = json_encode($stories, JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
-        if (file_put_contents($allStoriesFile, $json, LOCK_EX) !== false) {
-            echo json_encode(['status' => 'success', 'message' => 'Stories saved to promptee.site server!', 'count' => count($stories)]);
+        
+        $saved = file_put_contents($allStoriesFile, $json, LOCK_EX);
+        if ($saved !== false) {
+            @file_put_contents($backupFile, $json, LOCK_EX);
+            echo json_encode(['status' => 'success', 'message' => 'All content auto-saved on promptee.site server!', 'count' => count($stories)]);
         } else {
-            echo json_encode(['status' => 'error', 'message' => 'Failed to write stories to disk']);
+            echo json_encode(['status' => 'error', 'message' => 'Failed to write data file to server disk']);
         }
         exit;
     }
@@ -58,12 +67,14 @@ if ($method === 'POST') {
         $filtered = array_values(array_filter($existing, function($s) use ($targetId) {
             return ($s['id'] ?? '') !== $targetId;
         }));
-        file_put_contents($allStoriesFile, json_encode($filtered, JSON_PRETTY_PRINT), LOCK_EX);
-        echo json_encode(['status' => 'success', 'message' => 'Story deleted from server']);
+        $json = json_encode($filtered, JSON_PRETTY_PRINT);
+        file_put_contents($allStoriesFile, $json, LOCK_EX);
+        @file_put_contents($backupFile, $json, LOCK_EX);
+        echo json_encode(['status' => 'success', 'message' => 'Story deleted from server persistence']);
         exit;
     }
     
-    // Fallback: save single story
+    // Fallback single story save
     if (isset($data['storyName'])) {
         $existing = [];
         if (file_exists($allStoriesFile)) {
@@ -84,8 +95,10 @@ if ($method === 'POST') {
             $existing[] = $data;
         }
         
-        file_put_contents($allStoriesFile, json_encode($existing, JSON_PRETTY_PRINT), LOCK_EX);
-        echo json_encode(['status' => 'success', 'message' => 'Story saved on hosting server!', 'id' => $storyId]);
+        $json = json_encode($existing, JSON_PRETTY_PRINT);
+        file_put_contents($allStoriesFile, $json, LOCK_EX);
+        @file_put_contents($backupFile, $json, LOCK_EX);
+        echo json_encode(['status' => 'success', 'message' => 'Content saved on hosting server!', 'id' => $storyId]);
         exit;
     }
     
@@ -102,16 +115,17 @@ if ($method === 'POST') {
         }
     }
     
-    // Fallback: search individual files if present
-    $files = glob($storageDir . '/storyboard_*.json');
-    $stories = [];
-    foreach ($files as $file) {
-        $content = json_decode(file_get_contents($file), true);
-        if ($content) {
-            $stories[] = $content;
+    // Backup fallback
+    if (file_exists($backupFile)) {
+        $content = file_get_contents($backupFile);
+        $stories = json_decode($content, true);
+        if ($stories !== null) {
+            echo json_encode(['status' => 'success', 'stories' => $stories]);
+            exit;
         }
     }
-    echo json_encode(['status' => 'success', 'stories' => $stories]);
+    
+    echo json_encode(['status' => 'success', 'stories' => []]);
     exit;
 
 } else {

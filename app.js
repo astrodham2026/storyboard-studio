@@ -248,6 +248,21 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   let serverSaveDebounce = null;
+  const cloudSaveStatus = document.getElementById('cloud-save-status');
+
+  function updateCloudStatus(statusText, type) {
+    if (!cloudSaveStatus) return;
+    if (type === 'saving') {
+      cloudSaveStatus.className = 'cloud-save-badge saving';
+      cloudSaveStatus.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+    } else if (type === 'offline') {
+      cloudSaveStatus.className = 'cloud-save-badge offline';
+      cloudSaveStatus.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Saved Locally';
+    } else {
+      cloudSaveStatus.className = 'cloud-save-badge';
+      cloudSaveStatus.innerHTML = '<i class="fa-solid fa-cloud-check"></i> Auto-Saved';
+    }
+  }
 
   function save() {
     if (!state.activeStoryId) {
@@ -277,29 +292,50 @@ document.addEventListener('DOMContentLoaded', () => {
       current.updatedAt = new Date().toISOString();
     }
 
-    localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
-    localStorage.setItem('storyboard_studio_data', JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes, trash: state.trash }));
+    // Protect against LocalStorage QuotaExceededError crashes
+    try {
+      localStorage.setItem('storyboard_studio_all_stories', JSON.stringify(state.stories));
+      localStorage.setItem('storyboard_studio_data', JSON.stringify({ storyName: state.storyName, genre: state.genre, scenes: state.scenes, trash: state.trash }));
+    } catch (quotaErr) {
+      console.warn('LocalStorage quota limit reached — server persistence handles storage.', quotaErr);
+    }
+
     updateTrashBadge();
     updateLandingBadges();
+    updateCloudStatus('Saving...', 'saving');
 
-    // Sync to promptee.site cloud hosting server asynchronously
+    // Debounced async push to promptee.site cloud hosting server
     clearTimeout(serverSaveDebounce);
     serverSaveDebounce = setTimeout(() => {
       syncStoriesToServer();
-    }, 400);
+    }, 300);
   }
 
   async function syncStoriesToServer() {
     try {
-      await fetch('api.php', {
+      const res = await fetch('api.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save_all', stories: state.stories })
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'success') {
+          updateCloudStatus('Auto-Saved', 'saved');
+        } else {
+          updateCloudStatus('Saved Locally', 'offline');
+        }
+      } else {
+        updateCloudStatus('Saved Locally', 'offline');
+      }
     } catch (e) {
       console.warn('Server cloud save warning:', e);
+      updateCloudStatus('Saved Locally', 'offline');
     }
   }
+
+  window.addEventListener('beforeunload', () => { save(); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
 
   function loadStoryToState(storyId) {
     const s = state.stories.find(item => item.id === storyId);
@@ -1358,10 +1394,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function readFileAsDataUrl(file) {
     return new Promise((res, rej) => {
-      const reader = new FileReader();
-      reader.onload = e => res(e.target.result);
-      reader.onerror = rej;
-      reader.readAsDataURL(file);
+      if (!file) return rej('No file provided');
+      if (file.type && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = new Image();
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            const maxWidth = 1920;
+            const maxHeight = 1080;
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            res(compressed);
+          };
+          img.onerror = () => res(e.target.result);
+          img.src = e.target.result;
+        };
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = e => res(e.target.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      }
     });
   }
 
